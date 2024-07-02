@@ -4,12 +4,13 @@
 NAME = ""
 
 # Telegram API (https://my.telegram.org/)
-API_ID = ""
+API_ID = 0
 API_HASH = ""
 BOT_TOKEN = ""
 
 # DB and Log
-OWNER_ID = ""
+OWNER_ID = 0
 DATABASE_FILE = "database.db"
 LOG_FILE = "log.txt"
-CHANNEL_ID = ""
+POST_ID = 0
+MEDIA_FOLDER = "media"

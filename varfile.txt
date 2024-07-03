@@ -1,16 +1,24 @@
 # Change the filename to varfile.py
 
 # Session Name
-NAME = ""
+NAME = "TG-Chan"
 
 # Telegram API (https://my.telegram.org/)
 API_ID = 0
-API_HASH = ""
-BOT_TOKEN = ""
+API_HASH = "abcd"
+BOT_TOKEN = "wxyz"
 
 # DB and Log
-OWNER_ID = 0
+OWNER_ID = 123
 DATABASE_FILE = "database.db"
-LOG_FILE = "log.txt"
-POST_ID = 0
+LOG_FILE = "stats.log"
+POST_ID = -456
 MEDIA_FOLDER = "media"
+
+# Posting Policies
+POST_INTERVAL = 300
+RESTRICT_DISLIKE_LIMIT = 10
+DELETE_DISLIKE_LIMIT = 5
+AUTODELETE_LIKE_LIMIT = 5
+PIN_LIKE_LIMIT = 10
+AUTODELETE_INTERVAL = 86400

@@ -3,6 +3,8 @@
 import pickle
 import typing
 import varfile
+import hashlib
+import random
 
 
 # Define Database Type
@@ -57,3 +59,15 @@ def syncn(func: typing.Callable) -> typing.Callable:
         return result
 
     return wrapper
+
+
+# Sugarcoated Functions
+
+def hash_user(user_id: int) -> str:
+    seed = random.randint(a=0, b=100000)
+    return hashlib.md5(string=str(user_id+seed).encode()).hexdigest() + str(seed).zfill(6)
+
+
+def verify_user(user_id: int, user_hash: str) -> bool:
+    seed = int(user_hash[-6:])
+    return user_hash == hashlib.md5(string=str(user_id+seed).encode()).hexdigest() + str(seed).zfill(6)

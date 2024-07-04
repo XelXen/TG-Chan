@@ -4,6 +4,8 @@ import time
 import config
 import database
 import os
+import re
+import uuid
 
 from pyrogram import filters
 from pyrogram import errors
@@ -26,6 +28,13 @@ app = pyrogram.Client(
 )
 
 
+# Define Core functions
+
+
+def sanitize_uuid(uuid: str) -> str:
+    return re.sub(pattern=r"[^a-zA-Z0-9-]", repl="", string=uuid)
+
+
 # Define Callback Functions
 
 
@@ -45,23 +54,22 @@ async def start(_: pyrogram.Client, message: Message) -> None:
             parse_mode=ParseMode.DISABLED,
         )
     else:
-        key = message.command[1]
+        file_path = "media/" + sanitize_uuid(uuid=message.command[1]).replace("-mp4", ".mp4").replace("-jpg", ".jpg")
 
-        file_path = f"media/{key[3:]}.{key[:3]}"
-        if not os.path.exists(path=file_path):
+        if not os.path.exists(file_path):
             await message.reply_text(
                 text=("Invalid media key! Please try again with a valid media key.")
             )
 
             return
 
-        if key.startswith("jpg"):
+        if message.command[1].endswith("jpg"):
             await message.reply_photo(
                 photo=file_path,
                 caption="Here is the media you requested.",
             )
 
-        elif key.startswith("mp4"):
+        elif message.command[1].endswith("mp4"):
             await message.reply_video(
                 video=file_path,
                 caption="Here is the media you requested.",
@@ -72,7 +80,7 @@ async def start(_: pyrogram.Client, message: Message) -> None:
 async def post(client: pyrogram.Client, message: Message) -> None:
     db = database.load()
 
-    uhash = database.hash_user(user_id=message.from_user.id)
+    uhash = database.hash(num=message.from_user.id)
 
     if uhash in db["user_timings"] and message.from_user.id != config.OWNER_ID:
         if db["user_timings"][uhash] > time.time():
@@ -85,9 +93,11 @@ async def post(client: pyrogram.Client, message: Message) -> None:
             return
 
     if len(db["autodelete"]) >= config.AUTODELETE_COUNT:
+        msg_id = db["autodelete"].pop(index=0)
+
         await client.delete_messages(
             chat_id=config.POST_ID,
-            message_ids=db["autodelete"].pop(0),
+            message_ids=msg_id,
         )
 
     message = message.reply_to_message
@@ -102,9 +112,13 @@ async def post(client: pyrogram.Client, message: Message) -> None:
 
             return
 
-        await message.download(file_name=f"media/{message.photo.file_id}.jpg")
-        command = f"https://t.me/{config.BOT_USERNAME}?start=jpg{message.photo.file_id}"
+        file_uuid = uuid.uuid1()
+
+        await message.download(file_name=f"media/{file_uuid}.jpg")
+
         caption = message.caption if message.caption else ""
+
+        command = f"https://t.me/{config.BOT_USERNAME}?start={file_uuid}-jpg"
 
         msg = await client.send_message(
             chat_id=config.POST_ID,
@@ -127,6 +141,8 @@ async def post(client: pyrogram.Client, message: Message) -> None:
             ),
         )
 
+        db["media"][msg.id] = f"media/{file_uuid}.jpg"
+
     elif message.video:
         if message.video.file_size > config.MAX_VIDEO_SIZE:
             await message.reply_text(
@@ -137,9 +153,13 @@ async def post(client: pyrogram.Client, message: Message) -> None:
 
             return
 
-        await message.download(file_name=f"media/{message.video.file_id}.mp4")
-        command = f"https://t.me/{config.BOT_USERNAME}?start=mp4{message.video.file_id}"
+        file_uuid = uuid.uuid1()
+
+        await message.download(file_name=f"media/{file_uuid}.mp4")
+
         caption = message.caption if message.caption else ""
+
+        command = f"https://t.me/{config.BOT_USERNAME}?start={file_uuid}-mp4"
 
         msg = await client.send_message(
             chat_id=config.POST_ID,
@@ -161,6 +181,8 @@ async def post(client: pyrogram.Client, message: Message) -> None:
                 ],
             ),
         )
+
+        db["media"][msg.id] = f"media/{file_uuid}.mp4"
 
     elif message.text:
         msg = await client.send_message(
@@ -235,7 +257,7 @@ async def delete(client: pyrogram.Client, message: Message) -> None:
 
     user_hash = msg.text.split("\n")[-1][6:]
 
-    if user_hash != database.hash_user(user_id=message.from_user.id):
+    if user_hash != database.hash(num=message.from_user.id):
         await message.reply_text(
             text=(
                 "You are not authorized to delete this message! Please try again with a valid message id."
@@ -248,6 +270,10 @@ async def delete(client: pyrogram.Client, message: Message) -> None:
         chat_id=config.POST_ID,
         message_ids=msg.id,
     )
+
+    if msg.id in db["media"]:
+        os.remove(path=db["media"][msg.id])
+        del db["media"][msg.id]
 
     del db["like_ratio"][msg.id]
     del db["like_users"][msg.id]
@@ -264,7 +290,7 @@ async def delete(client: pyrogram.Client, message: Message) -> None:
 async def hash(_: pyrogram.Client, message: Message) -> None:
     await message.reply_text(
         text=(
-            f"Your unique hash id is: `{database.hash_user(user_id=message.from_user.id)}`\n\n"
+            f"Your unique hash id is: `{database.hash(num=message.from_user.id)}`\n\n"
             "This hash id is used to authorize your actions on the bot. Even though it is not a secret, if corresponded with your user id, it can be used to verify your identity."
         ),
         parse_mode=ParseMode.MARKDOWN,
@@ -292,14 +318,14 @@ async def callback(_: pyrogram.Client, callback: CallbackQuery) -> None:
     if callback.message.id not in db["like_ratio"]:
         return
     elif (
-        database.hash_user(user_id=callback.from_user.id)
+        database.hash(num=callback.from_user.id)
         in db["like_users"][callback.message.id]
     ):
         await callback.answer(text="You have already given feedback to this message!")
         return
     else:
         db["like_users"][callback.message.id].add(
-            database.hash_user(user_id=callback.from_user.id)
+            database.hash(num=callback.from_user.id)
         )
 
     uhash = callback.message.text.split("\n")[-1][6:]
@@ -321,6 +347,17 @@ async def callback(_: pyrogram.Client, callback: CallbackQuery) -> None:
 
         elif db["like_ratio"][callback.message.id] <= -config.DELETE_DISLIKE_LIMIT:
             await callback.message.delete()
+
+            if callback.message.id in db["media"]:
+                os.remove(path=db["media"][callback.message.id])
+                del db["media"][callback.message.id]
+
+            del db["like_ratio"][callback.message.id]
+            del db["like_users"][callback.message.id]
+
+            if callback.message.id in db["autodelete"]:
+                db["autodelete"].remove(callback.message.id)
+
             db["user_timings"][uhash] = time.time() + 172800
 
     await callback.answer(text="Thank you for your feedback!")

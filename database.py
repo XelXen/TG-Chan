@@ -16,6 +16,7 @@ class DatabaseType(typing.TypedDict):
     user_timings: typing.Dict[str, int]
     autodelete: typing.List[int]
     like_users: typing.Dict[int, typing.Set[str]]
+    media: typing.Dict[int, str]
 
 
 # Database Core Functions
@@ -38,6 +39,7 @@ def load(name: str = config.DATABASE_FILE) -> DatabaseType:
             "user_timings": dict(),
             "autodelete": list(),
             "like_users": dict(),
+            "media": dict()
         }
 
         save(db=db)
@@ -49,10 +51,5 @@ def load(name: str = config.DATABASE_FILE) -> DatabaseType:
 
 
 @lru_cache
-def hash_user(user_id: int) -> str:
-    return hashlib.md5(string=str(user_id + config.SEED).encode()).hexdigest()
-
-
-@lru_cache
-def verify_user(user_id: int, user_hash: str) -> bool:
-    return user_hash == hashlib.md5(string=str(user_id - config.SEED).encode()).hexdigest()
+def hash(num: int) -> str:
+    return hashlib.md5(string=str(num + config.SEED).encode()).hexdigest()

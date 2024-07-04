@@ -1,4 +1,4 @@
-# Change the filename to varfile.py
+# Change the filename to config.py
 
 # Session Name
 NAME = "TG-Chan"

@@ -55,7 +55,7 @@ async def start(_: pyrogram.Client, message: Message) -> None:
 
             return
 
-        if key.startswith("img"):
+        if key.startswith("jpg"):
             await message.reply_photo(
                 photo=file_path,
                 caption="Here is the media you requested.",
@@ -103,7 +103,7 @@ async def post(client: pyrogram.Client, message: Message) -> None:
             return
 
         await message.download(file_name=f"media/{message.photo.file_id}.jpg")
-        command = f"https://t.me/{config.BOT_USERNAME}?start=img{message.photo.file_id}"
+        command = f"https://t.me/{config.BOT_USERNAME}?start=jpg{message.photo.file_id}"
         caption = message.caption if message.caption else ""
 
         msg = await client.send_message(

@@ -295,7 +295,7 @@ async def callback(_: pyrogram.Client, callback: CallbackQuery) -> None:
         database.hash_user(user_id=callback.from_user.id)
         in db["like_users"][callback.message.id]
     ):
-        callback.answer(text="You have already given feedback to this message!")
+        await callback.answer(text="You have already given feedback to this message!")
         return
     else:
         db["like_users"][callback.message.id].add(

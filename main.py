@@ -5,7 +5,7 @@ import config
 import database
 import os
 import re
-import uuid
+import random
 
 from pyrogram import filters
 from pyrogram.types import (
@@ -96,6 +96,9 @@ async def post(client: pyrogram.Client, message: Message) -> None:
             )
 
             return
+        
+    seed = random.randint(a=-999_999, b=999_999)
+    shash = database.hash(num=message.reply_to_message.from_user.id + seed)
 
     if len(db["autodelete"]) >= config.AUTODELETE_COUNT:
         msg_id = db["autodelete"].pop(0)
@@ -117,19 +120,17 @@ async def post(client: pyrogram.Client, message: Message) -> None:
 
             return
 
-        file_uuid = uuid.uuid1()
-
-        await message.download(file_name=f"media/{file_uuid}.jpg")
+        await message.download(file_name=f"media/{shash}.jpg")
 
         caption = message.caption if message.caption else ""
 
-        command = f"https://t.me/{config.BOT_USERNAME}?start={file_uuid}-jpg"
+        command = f"https://t.me/{config.BOT_USERNAME}?start={shash}-jpg"
 
         msg = await client.send_message(
             chat_id=config.POST_ID,
             text=caption
             + f"\n\n[Click here to view the photo]({command})"
-            + f"\n\nHash: {uhash}",
+            + f"\n\nHash: {shash}",
             reply_markup=InlineKeyboardMarkup(
                 inline_keyboard=[
                     [
@@ -146,7 +147,7 @@ async def post(client: pyrogram.Client, message: Message) -> None:
             ),
         )
 
-        db["media"][msg.id] = f"media/{file_uuid}.jpg"
+        db["media"][msg.id] = f"media/{shash}.jpg"
 
     elif message.video:
         if message.video.file_size > config.MAX_VIDEO_SIZE:
@@ -158,19 +159,17 @@ async def post(client: pyrogram.Client, message: Message) -> None:
 
             return
 
-        file_uuid = uuid.uuid1()
-
-        await message.download(file_name=f"media/{file_uuid}.mp4")
+        await message.download(file_name=f"media/{shash}.mp4")
 
         caption = message.caption if message.caption else ""
 
-        command = f"https://t.me/{config.BOT_USERNAME}?start={file_uuid}-mp4"
+        command = f"https://t.me/{config.BOT_USERNAME}?start={shash}-mp4"
 
         msg = await client.send_message(
             chat_id=config.POST_ID,
             text=caption
             + f"\n\n[Click here to view the video]({command})"
-            + f"\n\nHash: {uhash}",
+            + f"\n\nHash: {shash}",
             reply_markup=InlineKeyboardMarkup(
                 inline_keyboard=[
                     [
@@ -187,12 +186,12 @@ async def post(client: pyrogram.Client, message: Message) -> None:
             ),
         )
 
-        db["media"][msg.id] = f"media/{file_uuid}.mp4"
+        db["media"][msg.id] = f"media/{shash}.mp4"
 
     elif message.text:
         msg = await client.send_message(
             chat_id=config.POST_ID,
-            text=message.text + f"\n\nHash: {uhash}",
+            text=message.text + f"\n\nHash: {shash}",
             reply_markup=InlineKeyboardMarkup(
                 inline_keyboard=[
                     [
@@ -223,7 +222,7 @@ async def post(client: pyrogram.Client, message: Message) -> None:
 
     await message.reply_text(
         text=(
-            f"Your message has been successfully posted!\nTo delete your post using the `/delete {msg.id}` command."
+            f"Your message has been successfully posted!\nTo delete your post using the `/delete {msg.id} {seed}` command."
         )
     )
 
@@ -236,16 +235,16 @@ async def post(client: pyrogram.Client, message: Message) -> None:
 async def delete(client: pyrogram.Client, message: Message) -> None:
     db = database.load()
 
-    if len(message.command) != 2:
+    if len(message.command) != 3:
         await message.reply_text(
-            text=("Invalid command! Please try again with a valid message id.")
+            text=("Invalid syntax!")
         )
 
         return
 
-    elif not message.command[1].isdigit():
+    elif not message.command[1].isdigit() or not message.command[2].replace("-", "").isnumeric():
         await message.reply_text(
-            text=("Invalid message id! Please try again with a valid message id.")
+            text=("Invalid command!")
         )
 
         return
@@ -264,7 +263,7 @@ async def delete(client: pyrogram.Client, message: Message) -> None:
 
         return
 
-    if user_hash != database.hash(num=message.from_user.id):
+    if user_hash != database.hash(num=message.from_user.id + int(message.command[2])):
         await message.reply_text(
             text=(
                 "You are not authorized to delete this message! Please try again with a valid message id."

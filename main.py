@@ -35,6 +35,12 @@ def sanitize_uuid(uuid: str) -> str:
     return re.sub(pattern=r"[^a-zA-Z0-9-]", repl="", string=uuid)
 
 
+def printlog(text: str) -> None:
+    print(text)
+    with open(file=config.LOG_FILE, mode="a") as f:
+        f.write(time.strftime("%Y-%m-%d %H:%M:%S") + " - " + text + "\n")
+
+
 # Define Callback Functions
 
 
@@ -222,6 +228,8 @@ async def post(client: pyrogram.Client, message: Message) -> None:
         )
     )
 
+    printlog(f"User {uhash} posted a message with id {msg.id}!")
+
     database.save(db=db)
 
 
@@ -282,6 +290,8 @@ async def delete(client: pyrogram.Client, message: Message) -> None:
         db["autodelete"].remove(msg.id)
 
     await message.reply_text(text=("The message has been successfully deleted!"))
+
+    printlog(f"User {user_hash} deleted a message with id {msg.id}!")
 
     database.save(db=db)
 

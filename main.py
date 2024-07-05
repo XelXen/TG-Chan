@@ -38,7 +38,7 @@ def sanitize_uuid(uuid: str) -> str:
 def printlog(text: str) -> None:
     print(text)
     with open(file=config.LOG_FILE, mode="a") as f:
-        f.write(time.strftime("%Y-%m-%d %H:%M:%S") + " - " + text + "\n")
+        f.write(f"[{time.strftime("%Y-%m-%d %H:%M:%S")}] {text}\n")
 
 
 # Define Callback Functions
@@ -55,7 +55,7 @@ async def start(_: pyrogram.Client, message: Message) -> None:
                 "/post - Post an anonymous message (use as a reply to the message)\n"
                 "/delete <n> - Delete a message of message id <n>\n"
                 "/hash - Get your unique hash ID\n"
-                "/privacy - Get Privacy Policy of the bot"
+                "/privacy - Get Privacy Policy of the bot\n"
             ),
             parse_mode=ParseMode.DISABLED,
         )

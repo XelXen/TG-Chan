@@ -8,7 +8,6 @@ import re
 import uuid
 
 from pyrogram import filters
-from pyrogram import errors
 from pyrogram.types import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -99,7 +98,7 @@ async def post(client: pyrogram.Client, message: Message) -> None:
             return
 
     if len(db["autodelete"]) >= config.AUTODELETE_COUNT:
-        msg_id = db["autodelete"].pop(index=0)
+        msg_id = db["autodelete"].pop(0)
 
         await client.delete_messages(
             chat_id=config.POST_ID,
@@ -256,14 +255,14 @@ async def delete(client: pyrogram.Client, message: Message) -> None:
             chat_id=config.POST_ID,
             message_ids=int(message.command[1]),
         )
-    except errors.exceptions.bad_request_400.MessageIdInvalid:
+
+        user_hash = msg.text.split("\n")[-1][6:]
+    except:
         await message.reply_text(
             text=("Invalid message id! Please try again with a valid message id.")
         )
 
         return
-
-    user_hash = msg.text.split("\n")[-1][6:]
 
     if user_hash != database.hash(num=message.from_user.id):
         await message.reply_text(
@@ -343,19 +342,19 @@ async def callback(_: pyrogram.Client, callback: CallbackQuery) -> None:
     if callback.data == "like":
         db["like_ratio"][callback.message.id] += 1
 
-        if db["like_ratio"][callback.message.id] >= config.PIN_LIKE_LIMIT:
+        if db["like_ratio"][callback.message.id] == config.PIN_LIKE_LIMIT:
             callback.message.pin()
 
-        elif db["like_ratio"][callback.message.id] >= config.AUTODELETE_LIKE_LIMIT:
+        elif db["like_ratio"][callback.message.id] == config.AUTODELETE_LIKE_LIMIT:
             db["autodelete"].remove(callback.message.id)
 
     elif callback.data == "dislike":
         db["like_ratio"][callback.message.id] -= 1
 
-        if db["like_ratio"][callback.message.id] <= -config.RESTRICT_DISLIKE_LIMIT:
+        if db["like_ratio"][callback.message.id] == -config.RESTRICT_DISLIKE_LIMIT:
             db["user_timings"][uhash] = time.time() + 86400
 
-        elif db["like_ratio"][callback.message.id] <= -config.DELETE_DISLIKE_LIMIT:
+        elif db["like_ratio"][callback.message.id] == -config.DELETE_DISLIKE_LIMIT:
             await callback.message.delete()
 
             if callback.message.id in db["media"]:

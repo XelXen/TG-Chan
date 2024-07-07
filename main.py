@@ -30,8 +30,8 @@ app = pyrogram.Client(
 # Define Core functions
 
 
-def sanitize_uuid(uuid: str) -> str:
-    return re.sub(pattern=r"[^a-zA-Z0-9-]", repl="", string=uuid)
+def sanitize_str(string: str) -> str:
+    return re.sub(pattern=r"[^a-zA-Z0-9-]", repl="", string=string)
 
 
 def printlog(text: str) -> None:
@@ -52,6 +52,7 @@ async def start(_: pyrogram.Client, message: Message) -> None:
                 "Command List:\n"
                 "/start - Introduction & command list\n"
                 "/post - Post an anonymous message (use as a reply to the message)\n"
+                "/post <x> - Post an anonymous reply to channel post link <x>\n"
                 "/delete <n> - Delete a message of message id <n>\n"
                 "/hash - Get your unique hash ID\n"
                 "/privacy - Get Privacy Policy of the bot\n"
@@ -59,7 +60,7 @@ async def start(_: pyrogram.Client, message: Message) -> None:
             parse_mode=ParseMode.DISABLED,
         )
     else:
-        file_path = "media/" + sanitize_uuid(uuid=message.command[1]).replace("-mp4", ".mp4").replace("-jpg", ".jpg")
+        file_path = "media/" + sanitize_str(string=message.command[1]).replace("-mp4", ".mp4").replace("-jpg", ".jpg")
 
         if not os.path.exists(file_path):
             await message.reply_text(
@@ -100,7 +101,36 @@ async def post(client: pyrogram.Client, message: Message) -> None:
     seed = random.randint(a=-999_999, b=999_999)
     shash = database.hash(num=message.reply_to_message.from_user.id + seed)
 
+    if len(message.command) == 2:
+        reply_id = int(re.findall(r"\d+$", sanitize_str(message.command[1]))[0])
+    elif len(message.command) == 1:
+        reply_id = None
+    else:
+        await message.reply_text(
+            text=("Invalid syntax!")
+        )
+
+        return
+    
+    # Check if the id is valid and on the channel
+
+    try:
+        await client.get_messages(
+            chat_id=config.POST_ID,
+            message_ids=reply_id,
+        )
+    except:
+        await message.reply_text(
+            text=("Invalid reply id! Please try again with a valid reply id.")
+        )
+
+        return
+
     if len(db["autodelete"]) >= config.AUTODELETE_COUNT:
+        if reply_id == db["autodelete"][0]:
+            await message.reply_text("This is an invalid reply")
+            return
+
         msg_id = db["autodelete"].pop(0)
 
         await client.delete_messages(
@@ -127,6 +157,7 @@ async def post(client: pyrogram.Client, message: Message) -> None:
         command = f"https://t.me/{config.BOT_USERNAME}?start={shash}-jpg"
 
         msg = await client.send_message(
+            reply_to_message_id=reply_id,
             chat_id=config.POST_ID,
             text=caption
             + f"\n\n[Click here to view the photo]({command})"
@@ -166,6 +197,7 @@ async def post(client: pyrogram.Client, message: Message) -> None:
         command = f"https://t.me/{config.BOT_USERNAME}?start={shash}-mp4"
 
         msg = await client.send_message(
+            reply_to_message_id=reply_id,
             chat_id=config.POST_ID,
             text=caption
             + f"\n\n[Click here to view the video]({command})"
@@ -190,6 +222,7 @@ async def post(client: pyrogram.Client, message: Message) -> None:
 
     elif message.text:
         msg = await client.send_message(
+            reply_to_message_id=reply_id,
             chat_id=config.POST_ID,
             text=message.text + f"\n\nHash: {shash}",
             reply_markup=InlineKeyboardMarkup(

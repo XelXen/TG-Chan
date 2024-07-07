@@ -256,7 +256,7 @@ async def post(client: pyrogram.Client, message: Message) -> None:
 
     await message.reply_text(
         text=(
-            f"Your message has been successfully posted!\nTo delete your post using the `/delete {msg.id} {seed}` command."
+            f"Your [message](https://t.me/{config.POST_USERNAME}/{msg.id}) has been successfully posted!\nTo delete your post using the `/delete {msg.id} {seed}` command."
         )
     )
 

@@ -7,6 +7,7 @@ NAME = "TG-Chan"
 API_ID = 0
 API_HASH = "abcd"
 BOT_TOKEN = "wxyz"
+BOT_USERNAME = "XXXXX"
 
 # DB and Log
 SEED = 10
@@ -15,6 +16,7 @@ DATABASE_FILE = "database.db"
 LOG_FILE = "stats.log"
 POST_ID = -456
 MEDIA_FOLDER = "media"
+POST_USERNAME = "XXXXX"
 
 # Posting Policies
 POST_INTERVAL = 300

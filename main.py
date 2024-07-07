@@ -115,10 +115,11 @@ async def post(client: pyrogram.Client, message: Message) -> None:
     # Check if the id is valid and on the channel
 
     try:
-        await client.get_messages(
-            chat_id=config.POST_ID,
-            message_ids=reply_id,
-        )
+        if reply_id is not None:
+            await client.get_messages(
+                chat_id=config.POST_ID,
+                message_ids=reply_id,
+            )
     except:
         await message.reply_text(
             text=("Invalid reply id! Please try again with a valid reply id.")

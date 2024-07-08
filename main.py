@@ -134,6 +134,8 @@ async def post(client: pyrogram.Client, message: Message) -> None:
 
         msg_id = db["autodelete"].pop(0)
 
+        printlog(text=f"Auto-deleting message with id {db['autodelete'][0]}!")
+
         await client.delete_messages(
             chat_id=config.POST_ID,
             message_ids=msg_id,

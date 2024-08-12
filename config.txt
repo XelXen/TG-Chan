@@ -13,7 +13,6 @@ BOT_USERNAME = "XXXXX"
 SEED = 10
 OWNER_ID = 123
 DATABASE_FILE = "database.db"
-LOG_FILE = "stats.log"
 POST_ID = -456
 MEDIA_FOLDER = "media"
 POST_USERNAME = "XXXXX"

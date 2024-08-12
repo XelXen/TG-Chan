@@ -1,25 +1,26 @@
 # Import Core Libraries
-import pyrogram
+import hydrogram
 import time
 import config
 import database
+import asyncio
 import os
 import re
 import random
 
-from pyrogram import filters
-from pyrogram.types import (
+from hydrogram import filters
+from hydrogram.types import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     CallbackQuery,
     Message,
 )
-from pyrogram.enums.parse_mode import ParseMode
+from hydrogram.enums.parse_mode import ParseMode
 
 
-# Initialize Pyrogram Client
+# Initialize hydrogram Client
 
-app = pyrogram.Client(
+app = hydrogram.Client(
     name=config.NAME,
     api_id=config.API_ID,
     api_hash=config.API_HASH,
@@ -36,7 +37,13 @@ def sanitize_str(string: str) -> str:
 
 def printlog(text: str) -> None:
     print(text)
-    with open(file=config.LOG_FILE, mode="a") as f:
+
+    if not os.path.exists("logs"):
+        os.mkdir("logs")
+
+    name = os.path.join("logs", time.strftime("%Y%m%d") + ".log")
+
+    with open(file=name, mode="a") as f:
         f.write(f"[{time.strftime("%Y-%m-%d %H:%M:%S")}] {text}\n")
 
 
@@ -44,7 +51,7 @@ def printlog(text: str) -> None:
 
 
 @app.on_message(filters=filters.command(commands=["start"]))
-async def start(_: pyrogram.Client, message: Message) -> None:
+async def start(_: hydrogram.Client, message: Message) -> None:
     if len(message.command) == 1:
         await message.reply_text(
             text=(
@@ -60,6 +67,8 @@ async def start(_: pyrogram.Client, message: Message) -> None:
             parse_mode=ParseMode.DISABLED,
         )
     else:
+        # Send the media and then delete it after 30 seconds
+
         file_path = "media/" + sanitize_str(string=message.command[1]).replace("-mp4", ".mp4").replace("-jpg", ".jpg")
 
         if not os.path.exists(file_path):
@@ -68,22 +77,30 @@ async def start(_: pyrogram.Client, message: Message) -> None:
             )
 
             return
+        
+        if config.AUTOPURGE_MEDIA:
+            caption = f"Here is the media you requested. It will be deleted in {config.AUTOPURGE_INTERVAL} seconds."
+        else:
+            caption = "Here is the media you requested."
 
         if message.command[1].endswith("jpg"):
-            await message.reply_photo(
+            msg = await message.reply_photo(
                 photo=file_path,
-                caption="Here is the media you requested.",
+                caption=caption,
             )
 
         elif message.command[1].endswith("mp4"):
-            await message.reply_video(
+            msg = await message.reply_video(
                 video=file_path,
-                caption="Here is the media you requested.",
+                caption=caption,
             )
 
+        if config.AUTOPURGE_MEDIA:
+            await asyncio.sleep(config.AUTOPURGE_INTERVAL)
+            await msg.delete()
 
 @app.on_message(filters=filters.command(commands=["post"]) & filters.reply)
-async def post(client: pyrogram.Client, message: Message) -> None:
+async def post(client: hydrogram.Client, message: Message) -> None:
     db = database.load()
 
     uhash = database.hash(num=message.from_user.id)
@@ -120,7 +137,9 @@ async def post(client: pyrogram.Client, message: Message) -> None:
                 chat_id=config.POST_ID,
                 message_ids=reply_id,
             )
-    except:
+    except Exception as e:
+        print(f"Error: {e}")
+
         await message.reply_text(
             text=("Invalid reply id! Please try again with a valid reply id.")
         )
@@ -268,7 +287,7 @@ async def post(client: pyrogram.Client, message: Message) -> None:
 
 
 @app.on_message(filters=filters.command(commands=["delete"]))
-async def delete(client: pyrogram.Client, message: Message) -> None:
+async def delete(client: hydrogram.Client, message: Message) -> None:
     db = database.load()
 
     if len(message.command) != 3:
@@ -292,14 +311,16 @@ async def delete(client: pyrogram.Client, message: Message) -> None:
         )
 
         user_hash = msg.text.split("\n")[-1][6:]
-    except:
+    except Exception as e:
+        print(f"Error: {e}")
+
         await message.reply_text(
             text=("Invalid message id! Please try again with a valid message id.")
         )
 
         return
 
-    if user_hash != database.hash(num=message.from_user.id + int(message.command[2])):
+    if user_hash != database.hash(num=message.from_user.id + int(message.command[2])) and message.from_user.id != config.OWNER_ID:
         await message.reply_text(
             text=(
                 "You are not authorized to delete this message! Please try again with a valid message id."
@@ -331,7 +352,7 @@ async def delete(client: pyrogram.Client, message: Message) -> None:
 
 
 @app.on_message(filters=filters.command(commands=["hash"]))
-async def hash(_: pyrogram.Client, message: Message) -> None:
+async def hash(_: hydrogram.Client, message: Message) -> None:
     await message.reply_text(
         text=(
             f"Your unique hash id is: `{database.hash(num=message.from_user.id)}`\n\n"
@@ -342,7 +363,7 @@ async def hash(_: pyrogram.Client, message: Message) -> None:
 
 
 @app.on_message(filters=filters.command(commands=["privacy"]))
-async def privacy(_: pyrogram.Client, message: Message) -> None:
+async def privacy(_: hydrogram.Client, message: Message) -> None:
     await message.reply_text(
         text=(
             "Privacy Policy:\n\n"
@@ -356,7 +377,7 @@ async def privacy(_: pyrogram.Client, message: Message) -> None:
 
 
 @app.on_callback_query()
-async def callback(_: pyrogram.Client, callback: CallbackQuery) -> None:
+async def callback(_: hydrogram.Client, callback: CallbackQuery) -> None:
     db = database.load()
 
     if callback.message.id not in db["like_ratio"]:

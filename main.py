@@ -61,7 +61,6 @@ async def start(_: hydrogram.Client, message: Message) -> None:
                 "/post - Post an anonymous message (use as a reply to the message)\n"
                 "/post <x> - Post an anonymous reply to channel post link <x>\n"
                 "/delete <n> - Delete a message of message id <n>\n"
-                "/hash - Get your unique hash ID\n"
                 "/privacy - Get Privacy Policy of the bot\n"
             ),
             parse_mode=ParseMode.DISABLED,
@@ -69,7 +68,9 @@ async def start(_: hydrogram.Client, message: Message) -> None:
     else:
         # Send the media and then delete it after 30 seconds
 
-        file_path = "media/" + sanitize_str(string=message.command[1]).replace("-mp4", ".mp4").replace("-jpg", ".jpg")
+        file_path = "media/" + sanitize_str(string=message.command[1]).replace(
+            "-mp4", ".mp4"
+        ).replace("-jpg", ".jpg")
 
         if not os.path.exists(file_path):
             await message.reply_text(
@@ -77,7 +78,7 @@ async def start(_: hydrogram.Client, message: Message) -> None:
             )
 
             return
-        
+
         if config.AUTOPURGE_MEDIA:
             caption = f"Here is the media you requested. It will be deleted in {config.AUTOPURGE_INTERVAL} seconds."
         else:
@@ -99,6 +100,7 @@ async def start(_: hydrogram.Client, message: Message) -> None:
             await asyncio.sleep(config.AUTOPURGE_INTERVAL)
             await msg.delete()
 
+
 @app.on_message(filters=filters.command(commands=["post"]) & filters.reply)
 async def post(client: hydrogram.Client, message: Message) -> None:
     db = database.load()
@@ -114,7 +116,7 @@ async def post(client: hydrogram.Client, message: Message) -> None:
             )
 
             return
-        
+
     seed = random.randint(a=-999_999, b=999_999)
     shash = database.hash(num=message.reply_to_message.from_user.id + seed)
 
@@ -123,12 +125,10 @@ async def post(client: hydrogram.Client, message: Message) -> None:
     elif len(message.command) == 1:
         reply_id = None
     else:
-        await message.reply_text(
-            text=("Invalid syntax!")
-        )
+        await message.reply_text(text=("Invalid syntax!"))
 
         return
-    
+
     # Check if the id is valid and on the channel
 
     try:
@@ -291,16 +291,15 @@ async def delete(client: hydrogram.Client, message: Message) -> None:
     db = database.load()
 
     if len(message.command) != 3:
-        await message.reply_text(
-            text=("Invalid syntax!")
-        )
+        await message.reply_text(text=("Invalid syntax!"))
 
         return
 
-    elif not message.command[1].isdigit() or not message.command[2].replace("-", "").isnumeric():
-        await message.reply_text(
-            text=("Invalid command!")
-        )
+    elif (
+        not message.command[1].isdigit()
+        or not message.command[2].replace("-", "").isnumeric()
+    ):
+        await message.reply_text(text=("Invalid command!"))
 
         return
 
@@ -320,7 +319,10 @@ async def delete(client: hydrogram.Client, message: Message) -> None:
 
         return
 
-    if user_hash != database.hash(num=message.from_user.id + int(message.command[2])) and message.from_user.id != config.OWNER_ID:
+    if (
+        user_hash != database.hash(num=message.from_user.id + int(message.command[2]))
+        and message.from_user.id != config.OWNER_ID
+    ):
         await message.reply_text(
             text=(
                 "You are not authorized to delete this message! Please try again with a valid message id."
@@ -349,17 +351,6 @@ async def delete(client: hydrogram.Client, message: Message) -> None:
     printlog(f"User {user_hash} deleted a message with id {msg.id}!")
 
     database.save(db=db)
-
-
-@app.on_message(filters=filters.command(commands=["hash"]))
-async def hash(_: hydrogram.Client, message: Message) -> None:
-    await message.reply_text(
-        text=(
-            f"Your unique hash id is: `{database.hash(num=message.from_user.id)}`\n\n"
-            "This hash id is used to authorize your actions on the bot. Even though it is not a secret, if corresponded with your user id, it can be used to verify your identity."
-        ),
-        parse_mode=ParseMode.MARKDOWN,
-    )
 
 
 @app.on_message(filters=filters.command(commands=["privacy"]))

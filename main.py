@@ -1,4 +1,5 @@
 # Import Core Libraries
+
 import hydrogram
 import time
 import config
@@ -15,10 +16,10 @@ from hydrogram.types import (
     CallbackQuery,
     Message,
 )
-from hydrogram.enums.parse_mode import ParseMode
+from typing import Dict
 
 
-# Initialize hydrogram Client
+# Initialize Client and Setup Memory
 
 app = hydrogram.Client(
     name=config.NAME,
@@ -27,15 +28,21 @@ app = hydrogram.Client(
     bot_token=config.BOT_TOKEN,
 )
 
+reply_mode: Dict[str, int] = {}
+
 
 # Define Core functions
 
 
 def sanitize_str(string: str) -> str:
+    ## Sanitizes the string by only allowing alphanumeric characters and hyphens
+
     return re.sub(pattern=r"[^a-zA-Z0-9-]", repl="", string=string)
 
 
 def printlog(text: str) -> None:
+    ## Prints the text to the console and logs it to a file
+
     print(text)
 
     if not os.path.exists("logs"):
@@ -51,239 +58,78 @@ def printlog(text: str) -> None:
 
 
 @app.on_message(filters=filters.command(commands=["start"]))
-async def start(_: hydrogram.Client, message: Message) -> None:
+async def start(_, message: Message) -> None:
     if len(message.command) == 1:
-        await message.reply_text(
-            text=(
-                "Hello there! I am TG-Chan Posting Bot. I can help you post anonymous messages to TG-Chan.\n\n"
-                "Command List:\n"
-                "/start - Introduction & command list\n"
-                "/post - Post an anonymous message (use as a reply to the message)\n"
-                "/post <x> - Post an anonymous reply to channel post link <x>\n"
-                "/delete <n> - Delete a message of message id <n>\n"
-                "/privacy - Get Privacy Policy of the bot\n"
-            ),
-            parse_mode=ParseMode.DISABLED,
-        )
-    else:
-        # Send the media and then delete it after 30 seconds
+        ## Intro Function
 
-        file_path = "media/" + sanitize_str(string=message.command[1]).replace(
-            "-mp4", ".mp4"
-        ).replace("-jpg", ".jpg")
+        await message.reply_text(
+            text="Hello there! I am TG-Chan Posting Bot. I can help you post anonymous messages to TG-Chan.\n\nTo get started, just send me a message to post on TG-Chan, to reply to an existing post, you can just click on the reply button on that post and send me a reply message\n\nYou can view the privacy policy using the /privacy command."
+        )
+
+    elif len(message.command) == 2:
+        ## Media Function
+
+        file_path = "media/" + sanitize_str(string=message.command[1])
+
+        if file_path.endswith("-jpg"):
+            file_path = file_path[:-4] + ".jpg"
+            extension = "jpg"
+        elif file_path.endswith("-mp4"):
+            file_path = file_path[:-4] + ".mp4"
+            extension = "mp4"
+        else:
+            extension = None
 
         if not os.path.exists(file_path):
             await message.reply_text(
                 text=("Invalid media key! Please try again with a valid media key.")
             )
-
             return
 
-        if config.AUTOPURGE_MEDIA:
-            caption = f"Here is the media you requested. It will be deleted in {config.AUTOPURGE_INTERVAL} seconds."
-        else:
-            caption = "Here is the media you requested."
-
-        if message.command[1].endswith("jpg"):
+        if extension == "jpg":
             msg = await message.reply_photo(
                 photo=file_path,
-                caption=caption,
+                caption=(
+                    f"Here is the photo you requested. It will be deleted in {config.AUTOPURGE_INTERVAL} seconds."
+                    if config.AUTOPURGE_MEDIA
+                    else "Here is the photo you requested."
+                ),
             )
 
-        elif message.command[1].endswith("mp4"):
+        elif extension == "mp4":
             msg = await message.reply_video(
                 video=file_path,
-                caption=caption,
+                caption=(
+                    f"Here is the video you requested. It will be deleted in {config.AUTOPURGE_INTERVAL} seconds."
+                    if config.AUTOPURGE_MEDIA
+                    else "Here is the video you requested."
+                ),
             )
 
         if config.AUTOPURGE_MEDIA:
             await asyncio.sleep(config.AUTOPURGE_INTERVAL)
             await msg.delete()
 
-
-@app.on_message(filters=filters.command(commands=["post"]) & filters.reply)
-async def post(client: hydrogram.Client, message: Message) -> None:
-    db = database.load()
-
-    uhash = database.hash(num=message.from_user.id)
-
-    if uhash in db["user_timings"] and message.from_user.id != config.OWNER_ID:
-        if db["user_timings"][uhash] > time.time():
-            await message.reply_text(
-                text=(
-                    "Please wait for a while before posting another message! You can post a message every 5 minutes but if you still cannot post, you might have been temporarily restricted from posting due to a high dislike ratio."
-                )
-            )
-
-            return
-
-    seed = random.randint(a=-999_999, b=999_999)
-    shash = database.hash(num=message.reply_to_message.from_user.id + seed)
-
-    if len(message.command) == 2:
-        reply_id = int(re.findall(r"\d+$", sanitize_str(message.command[1]))[0])
-    elif len(message.command) == 1:
-        reply_id = None
     else:
         await message.reply_text(text=("Invalid syntax!"))
 
-        return
 
-    # Check if the id is valid and on the channel
-
-    try:
-        if reply_id is not None:
-            await client.get_messages(
-                chat_id=config.POST_ID,
-                message_ids=reply_id,
-            )
-    except Exception as e:
-        print(f"Error: {e}")
-
-        await message.reply_text(
-            text=("Invalid reply id! Please try again with a valid reply id.")
-        )
-
-        return
-
-    if len(db["autodelete"]) >= config.AUTODELETE_COUNT:
-        if reply_id == db["autodelete"][0]:
-            await message.reply_text("This is an invalid reply")
-            return
-
-        msg_id = db["autodelete"].pop(0)
-
-        printlog(text=f"Auto-deleting message with id {db['autodelete'][0]}!")
-
-        await client.delete_messages(
-            chat_id=config.POST_ID,
-            message_ids=msg_id,
-        )
-
-    message = message.reply_to_message
-
-    if message.photo:
-        if message.photo.file_size > config.MAX_IMAGE_SIZE:
-            await message.reply_text(
-                text=(
-                    "The image size is too large! Please try again with a smaller/compressed image or add a link to the image instead."
-                )
-            )
-
-            return
-
-        await message.download(file_name=f"media/{shash}.jpg")
-
-        caption = message.caption if message.caption else ""
-
-        command = f"https://t.me/{config.BOT_USERNAME}?start={shash}-jpg"
-
-        msg = await client.send_message(
-            reply_to_message_id=reply_id,
-            chat_id=config.POST_ID,
-            text=caption
-            + f"\n\n[Click here to view the photo]({command})"
-            + f"\n\nHash: {shash}",
-            reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [
-                        InlineKeyboardButton(
-                            text="👍",
-                            callback_data="like",
-                        ),
-                        InlineKeyboardButton(
-                            text="👎",
-                            callback_data="dislike",
-                        ),
-                    ],
-                ],
-            ),
-        )
-
-        db["media"][msg.id] = f"media/{shash}.jpg"
-
-    elif message.video:
-        if message.video.file_size > config.MAX_VIDEO_SIZE:
-            await message.reply_text(
-                text=(
-                    "The video size is too large! Please try again with a smaller/compressed video or add a link to the video instead."
-                )
-            )
-
-            return
-
-        await message.download(file_name=f"media/{shash}.mp4")
-
-        caption = message.caption if message.caption else ""
-
-        command = f"https://t.me/{config.BOT_USERNAME}?start={shash}-mp4"
-
-        msg = await client.send_message(
-            reply_to_message_id=reply_id,
-            chat_id=config.POST_ID,
-            text=caption
-            + f"\n\n[Click here to view the video]({command})"
-            + f"\n\nHash: {shash}",
-            reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [
-                        InlineKeyboardButton(
-                            text="👍",
-                            callback_data="like",
-                        ),
-                        InlineKeyboardButton(
-                            text="👎",
-                            callback_data="dislike",
-                        ),
-                    ],
-                ],
-            ),
-        )
-
-        db["media"][msg.id] = f"media/{shash}.mp4"
-
-    elif message.text:
-        msg = await client.send_message(
-            reply_to_message_id=reply_id,
-            chat_id=config.POST_ID,
-            text=message.text + f"\n\nHash: {shash}",
-            reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [
-                        InlineKeyboardButton(
-                            text="👍",
-                            callback_data="like",
-                        ),
-                        InlineKeyboardButton(
-                            text="👎",
-                            callback_data="dislike",
-                        ),
-                    ],
-                ],
-            ),
-        )
-
-    else:
-        await message.reply_text(
-            text=("Invalid message type! Please try again with a valid message type.")
-        )
-
-        return
-
-    db["like_ratio"][msg.id] = 0
-    db["user_timings"][uhash] = time.time() + config.POST_INTERVAL
-    db["autodelete"].append(msg.id)
-    db["like_users"][msg.id] = set()
-
+@app.on_message(filters=filters.private & ~filters.command(commands=["start", "delete", "privacy", "cancel"]))
+async def post(client: hydrogram.Client, message: Message) -> None:
     await message.reply_text(
-        text=(
-            f"Your [message](https://t.me/{config.POST_USERNAME}/{msg.id}) has been successfully posted!\nTo delete your post using the `/delete {msg.id} {seed}` command."
-        )
+        text="Whenever you're ready, just click on the button down below to post your message to TG-Chan!",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="Post",
+                        callback_data="post",
+                    ),
+                ],
+            ],
+        ),
+        reply_to_message_id=message.id,
     )
-
-    printlog(f"User {uhash} posted a message with id {msg.id}!")
-
-    database.save(db=db)
 
 
 @app.on_message(filters=filters.command(commands=["delete"]))
@@ -292,7 +138,6 @@ async def delete(client: hydrogram.Client, message: Message) -> None:
 
     if len(message.command) != 3:
         await message.reply_text(text=("Invalid syntax!"))
-
         return
 
     elif (
@@ -300,7 +145,6 @@ async def delete(client: hydrogram.Client, message: Message) -> None:
         or not message.command[2].replace("-", "").isnumeric()
     ):
         await message.reply_text(text=("Invalid command!"))
-
         return
 
     try:
@@ -309,7 +153,7 @@ async def delete(client: hydrogram.Client, message: Message) -> None:
             message_ids=int(message.command[1]),
         )
 
-        user_hash = msg.text.split("\n")[-1][6:]
+        uhash = msg.text.split("\n")[-1][6:]
     except Exception as e:
         print(f"Error: {e}")
 
@@ -320,7 +164,7 @@ async def delete(client: hydrogram.Client, message: Message) -> None:
         return
 
     if (
-        user_hash != database.hash(num=message.from_user.id + int(message.command[2]))
+        uhash != database.hash(num=message.from_user.id + int(message.command[2]))
         and message.from_user.id != config.OWNER_ID
     ):
         await message.reply_text(
@@ -336,19 +180,11 @@ async def delete(client: hydrogram.Client, message: Message) -> None:
         message_ids=msg.id,
     )
 
-    if msg.id in db["media"]:
-        os.remove(path=db["media"][msg.id])
-        del db["media"][msg.id]
-
-    del db["like_ratio"][msg.id]
-    del db["like_users"][msg.id]
-
-    if msg.id in db["autodelete"]:
-        db["autodelete"].remove(msg.id)
+    database.remove_post(db=db, id=msg.id)
 
     await message.reply_text(text=("The message has been successfully deleted!"))
 
-    printlog(f"User {user_hash} deleted a message with id {msg.id}!")
+    printlog(f"User {uhash} deleted a message with id {msg.id}!")
 
     database.save(db=db)
 
@@ -368,57 +204,308 @@ async def privacy(_: hydrogram.Client, message: Message) -> None:
 
 
 @app.on_callback_query()
-async def callback(_: hydrogram.Client, callback: CallbackQuery) -> None:
+async def callback(client: hydrogram.Client, callback: CallbackQuery) -> None:
     db = database.load()
-
-    if callback.message.id not in db["like_ratio"]:
-        return
-    elif (
-        database.hash(num=callback.from_user.id)
-        in db["like_users"][callback.message.id]
-    ):
-        await callback.answer(text="You have already given feedback to this message!")
-        return
-    else:
-        db["like_users"][callback.message.id].add(
-            database.hash(num=callback.from_user.id)
-        )
-
-    uhash = callback.message.text.split("\n")[-1][6:]
+    uhash = database.hash(num=callback.from_user.id)
 
     if callback.data == "like":
-        db["like_ratio"][callback.message.id] += 1
+        if callback.message.id not in db["posts"]:
+            await callback.answer(text="Invalid message!")
+            return
+    
+        if uhash in db["posts"][callback.message.id]["feedbacks"]:
+            if db["posts"][callback.message.id]["feedbacks"][uhash] == database.Feedback.LIKE:
+                await callback.answer(text="You have already liked this message!")
+                return
+            else:
+                db["posts"][callback.message.id]["rating"] += 1
+                dislike = -1
+        else:
+            dislike = 0
+    
+        db["posts"][callback.message.id]["feedbacks"][uhash] = database.Feedback.LIKE
+        db["posts"][callback.message.id]["rating"] += 1
+        like = 1
 
-        if db["like_ratio"][callback.message.id] == config.PIN_LIKE_LIMIT:
-            callback.message.pin()
+        existing_reply_markup = callback.message.reply_markup.inline_keyboard
 
-        elif db["like_ratio"][callback.message.id] == config.AUTODELETE_LIKE_LIMIT:
-            db["autodelete"].remove(callback.message.id)
+        for row in existing_reply_markup:
+            for button in row:
+                if button.text.startswith("👍"):
+                    current = int(button.text.split(" : ")[1])
+                    button.text = f"👍 : {current + like}"
+                elif button.text.startswith("👎"):
+                    current = int(button.text.split(" : ")[1])
+                    button.text = f"👎 : {current + dislike}"
+
+        await callback.message.edit_reply_markup(reply_markup=InlineKeyboardMarkup(inline_keyboard=existing_reply_markup))
+
+        if db["posts"][callback.message.id]["rating"] >= config.AUTODELETE_LIKE_LIMIT:
+            if callback.message.id in db["autodelete"]:
+                del db["autodelete"][callback.message.id]
+            
+        if db["posts"][callback.message.id]["rating"] >= config.PIN_LIKE_LIMIT:
+            await callback.message.pin()
+
+        await callback.answer(text="Thank you for your feedback!")
 
     elif callback.data == "dislike":
-        db["like_ratio"][callback.message.id] -= 1
+        if callback.message.id not in db["posts"]:
+            await callback.answer(text="Invalid message!")
+            return
+    
+        if uhash in db["posts"][callback.message.id]["feedbacks"]:
+            if db["posts"][callback.message.id]["feedbacks"][uhash] == database.Feedback.DISLIKE:
+                await callback.answer(text="You have already disliked this message!")
+                return
+            else:
+                db["posts"][callback.message.id]["rating"] -= 1
+                like = -1
+        else:
+            like = 0
 
-        if db["like_ratio"][callback.message.id] == -config.RESTRICT_DISLIKE_LIMIT:
-            db["user_timings"][uhash] = time.time() + 86400
+        db["posts"][callback.message.id]["feedbacks"][uhash] = database.Feedback.DISLIKE
+        db["posts"][callback.message.id]["rating"] -= 1
+        dislike = 1
 
-        elif db["like_ratio"][callback.message.id] == -config.DELETE_DISLIKE_LIMIT:
-            await callback.message.delete()
+        existing_reply_markup = callback.message.reply_markup.inline_keyboard
 
-            if callback.message.id in db["media"]:
-                os.remove(path=db["media"][callback.message.id])
-                del db["media"][callback.message.id]
+        for row in existing_reply_markup:
+            for button in row:
+                if button.text.startswith("👍"):
+                    current = int(button.text.split(" : ")[1])
+                    button.text = f"👍 : {current + like}"
+                elif button.text.startswith("👎"):
+                    current = int(button.text.split(" : ")[1])
+                    button.text = f"👎 : {current + dislike}"
 
-            del db["like_ratio"][callback.message.id]
-            del db["like_users"][callback.message.id]
+        await callback.message.edit_reply_markup(reply_markup=InlineKeyboardMarkup(inline_keyboard=existing_reply_markup))
 
+        if db["posts"][callback.message.id]["rating"] <= -config.UNPIN_DISLIKE_LIMIT:
+            await callback.message.unpin()
+
+        if db["posts"][callback.message.id]["rating"] <= -config.DELETE_DISLIKE_LIMIT:
             if callback.message.id in db["autodelete"]:
-                db["autodelete"].remove(callback.message.id)
+                del db["autodelete"][callback.message.id]
 
-            db["user_timings"][uhash] = time.time() + 172800
+            await callback.message.delete()
+            database.remove_post(db=db, id=callback.message.id)
 
-    await callback.answer(text="Thank you for your feedback!")
+        await callback.answer(text="Thank you for your feedback!")
+
+    elif callback.data == "reply":
+        if callback.message.id not in db["posts"]:
+            await callback.answer(text="Invalid message!")
+            return
+
+        reply_mode[uhash] = callback.message.id
+
+        await callback.answer(text="Reply mode activated! Please send your reply message via bot. You can exit reply mode by sending /cancel.")
+
+        return
+    
+    elif callback.data == "post":
+        ## Post Function
+
+        uhash = database.hash(num=callback.from_user.id)
+
+        if uhash in db["timings"] and callback.from_user.id != config.OWNER_ID:
+            if db["timings"][uhash] > time.time():
+                await callback.answer(
+                    text=(
+                        "Please wait for a while before posting another message!"
+                    )
+                )
+
+                return
+            else:
+                del db["timings"][uhash]
+
+        seed = random.randint(a=-999_999, b=999_999)
+        shash = database.hash(num=callback.from_user.id + seed)
+
+        reply_id = reply_mode.pop(uhash) if uhash in reply_mode else None
+        try:
+            if reply_id is not None:
+                await client.get_messages(
+                    chat_id=config.POST_ID,
+                    message_ids=reply_id,
+                )
+        except Exception as e:
+            print(f"Error: {e}")
+            await callback.answer(
+                text=("Invalid reply id! Please try again with a valid reply id.")
+            )
+            return
+
+        if len(db["autodelete"]) >= config.AUTODELETE_COUNT:
+            if reply_id == db["autodelete"][0]:
+                await callback.answer(
+                    "Reply message is in the auto-delete queue! Please try again with a different message."
+                )
+                del db["reply_mode"][uhash]
+
+            msg_id = db["autodelete"].pop(0)
+            database.remove_post(db=db, id=msg_id)
+
+            printlog(text=f"Auto-deleting message with id {db['autodelete'][0]}!")
+
+            await client.delete_messages(
+                chat_id=config.POST_ID,
+                message_ids=msg_id,
+            )
+
+        message = callback.message.reply_to_message
+
+        if message.photo:
+            if message.photo.file_size > config.MAX_IMAGE_SIZE:
+                await message.reply_text(
+                    text=(
+                        "The image size is too large! Please try again with a smaller/compressed image or add a link to the image instead."
+                    )
+                )
+
+                return
+
+            await message.download(file_name=f"media/{shash}.jpg")
+
+            msg = await client.send_message(
+                reply_to_message_id=reply_id,
+                chat_id=config.POST_ID,
+                text=message.caption + f"\n\nHash: {shash}" if message.caption else f"\n\nHash: {shash}",
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text="View attached photo",
+                                url=f"https://t.me/{config.BOT_USERNAME}?start={shash}-jpg",
+                            ),
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                text="👍 : 0",
+                                callback_data="like",
+                            ),
+                            InlineKeyboardButton(
+                                text="👎 : 0",
+                                callback_data="dislike",
+                            ),
+                            InlineKeyboardButton(
+                                text="Reply",
+                                callback_data="reply",
+                            ),
+                        ],
+                    ],
+                ),
+            )
+
+            database.add_post(db=db, id=msg.id, media=f"media/{shash}.jpg")
+
+        elif message.video:
+            if message.video.file_size > config.MAX_VIDEO_SIZE:
+                await message.reply_text(
+                    text=(
+                        "The video size is too large! Please try again with a smaller/compressed video or add a link to the video instead."
+                    )
+                )
+
+                return
+
+            await message.download(file_name=f"media/{shash}.mp4")
+
+            msg = await client.send_message(
+                reply_to_message_id=reply_id,
+                chat_id=config.POST_ID,
+                text=message.caption + f"\n\nHash: {shash}" if message.caption else f"\n\nHash: {shash}",
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text="View attached video",
+                                url=f"https://t.me/{config.BOT_USERNAME}?start={shash}-mp4",
+                            ),
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                text="👍 : 0",
+                                callback_data="like",
+                            ),
+                            InlineKeyboardButton(
+                                text="👎 : 0",
+                                callback_data="dislike",
+                            ),
+                            InlineKeyboardButton(
+                                text="Reply",
+                                callback_data="reply",
+                            ),
+                        ],
+                    ],
+                ),
+            )
+
+            database.add_post(db=db, id=msg.id, media=f"media/{shash}.mp4")
+
+        elif message.text:
+            msg = await client.send_message(
+                reply_to_message_id=reply_id,
+                chat_id=config.POST_ID,
+                text=message.text + f"\n\nHash: {shash}",
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text="👍 : 0",
+                                callback_data="like",
+                            ),
+                            InlineKeyboardButton(
+                                text="👎 : 0",
+                                callback_data="dislike",
+                            ),
+                            InlineKeyboardButton(
+                                text="Reply",
+                                callback_data="reply",
+                            ),
+                        ],
+                    ],
+                ),
+            )
+
+            database.add_post(db=db, id=msg.id)
+
+        else:
+            await message.reply_text(
+                text=("Invalid message type! Please try again with a valid message type.")
+            )
+
+            return
+        
+        db["timings"][uhash] = time.time() + config.POST_INTERVAL
+        db["autodelete"].append(msg.id)
+
+        await callback.message.edit_text(
+            text=(
+                f"Your [message](https://t.me/{config.POST_USERNAME}/{msg.id}) has been successfully posted!\n\nTo delete your post, use the `/delete {msg.id} {seed}` command."
+            )
+        )
+
+        printlog(f"{uhash} posted a message with id {msg.id}!")
+
+    else:
+        await callback.answer(text="Invalid action!")
+        return
 
     database.save(db=db)
+
+
+@app.on_message(filters=filters.command(commands=["cancel"]))
+async def cancel(_: hydrogram.Client, message: Message) -> None:
+    uhash = database.hash(num=message.from_user.id)
+
+    if uhash in reply_mode:
+        del reply_mode[uhash]
+        await message.reply_text(text="Reply mode deactivated!")
+    else:
+        await message.reply_text(text="You are not in reply mode!")
 
 
 # Run the Bot

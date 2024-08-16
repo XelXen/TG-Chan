@@ -21,8 +21,9 @@ class Feedback(Enum):
 
 class PostType(typing.TypedDict):
     feedbacks: typing.Dict[str, Feedback]
-    rating: int
     media: typing.Optional[str]
+    shash: str
+    rating: int
 
 
 class DatabaseType(typing.TypedDict):
@@ -55,11 +56,11 @@ def load(name: str = config.DATABASE_FILE) -> DatabaseType:
 def hash(num: int) -> str:
     return hashlib.md5(string=str(num + config.SEED).encode()).hexdigest()
 
-def add_post(db: DatabaseType, id: int, media: str = None) -> None:
+def add_post(db: DatabaseType, shash: str, id: int, media: str = None) -> None:
     if id in db["posts"]:
         return
 
-    db["posts"][id] = {"feedbacks": {}, "media": media, "rating": 0}
+    db["posts"][id] = {"feedbacks": {}, "media": media, "shash": shash, "rating": 0}
 
 
 def remove_post(db: DatabaseType, id: int) -> None:
@@ -67,7 +68,7 @@ def remove_post(db: DatabaseType, id: int) -> None:
         return
     
     if id in db["autodelete"]:
-        del db["autodelete"][id]
+        db["autodelete"].remove(id)
 
     if db["posts"][id]["media"] is not None:
         os.remove(db["posts"][id]["media"])

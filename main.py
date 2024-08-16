@@ -153,20 +153,15 @@ async def delete(client: hydrogram.Client, message: Message) -> None:
             message_ids=int(message.command[1]),
         )
 
-        uhash = msg.text.split("\n")[-1][6:]
-    except Exception as e:
-        print(f"Error: {e}")
-
+        shash = db["posts"][msg.id]["shash"]
+    except Exception:
         await message.reply_text(
             text=("Invalid message id! Please try again with a valid message id.")
         )
 
         return
 
-    if (
-        uhash != database.hash(num=message.from_user.id + int(message.command[2]))
-        and message.from_user.id != config.OWNER_ID
-    ):
+    if (shash != database.hash(num=message.from_user.id + int(message.command[2])) and message.from_user.id != config.OWNER_ID):
         await message.reply_text(
             text=(
                 "You are not authorized to delete this message! Please try again with a valid message id."
@@ -184,7 +179,7 @@ async def delete(client: hydrogram.Client, message: Message) -> None:
 
     await message.reply_text(text=("The message has been successfully deleted!"))
 
-    printlog(f"User {uhash} deleted a message with id {msg.id}!")
+    printlog(f"User {shash} deleted a message with id {msg.id}!")
 
     database.save(db=db)
 
@@ -218,13 +213,13 @@ async def callback(client: hydrogram.Client, callback: CallbackQuery) -> None:
                 await callback.answer(text="You have already liked this message!")
                 return
             else:
-                db["posts"][callback.message.id]["rating"] += 1
+                db["posts"][callback.message.id]["rating"] += 2
                 dislike = -1
         else:
+            db["posts"][callback.message.id]["rating"] += 1
             dislike = 0
-    
+        
         db["posts"][callback.message.id]["feedbacks"][uhash] = database.Feedback.LIKE
-        db["posts"][callback.message.id]["rating"] += 1
         like = 1
 
         existing_reply_markup = callback.message.reply_markup.inline_keyboard
@@ -259,14 +254,14 @@ async def callback(client: hydrogram.Client, callback: CallbackQuery) -> None:
                 await callback.answer(text="You have already disliked this message!")
                 return
             else:
-                db["posts"][callback.message.id]["rating"] -= 1
+                db["posts"][callback.message.id]["rating"] -= 2
                 like = -1
         else:
+            db["posts"][callback.message.id]["rating"] -= 1
             like = 0
 
-        db["posts"][callback.message.id]["feedbacks"][uhash] = database.Feedback.DISLIKE
-        db["posts"][callback.message.id]["rating"] -= 1
         dislike = 1
+        db["posts"][callback.message.id]["feedbacks"][uhash] = database.Feedback.DISLIKE
 
         existing_reply_markup = callback.message.reply_markup.inline_keyboard
 
@@ -399,7 +394,7 @@ async def callback(client: hydrogram.Client, callback: CallbackQuery) -> None:
                 ),
             )
 
-            database.add_post(db=db, id=msg.id, media=f"media/{shash}.jpg")
+            database.add_post(db=db, id=msg.id, media=f"media/{shash}.jpg", shash=shash)
 
         elif message.video:
             if message.video.file_size > config.MAX_VIDEO_SIZE:
@@ -443,7 +438,7 @@ async def callback(client: hydrogram.Client, callback: CallbackQuery) -> None:
                 ),
             )
 
-            database.add_post(db=db, id=msg.id, media=f"media/{shash}.mp4")
+            database.add_post(db=db, id=msg.id, media=f"media/{shash}.mp4", shash=shash)
 
         elif message.text:
             msg = await client.send_message(
@@ -470,7 +465,7 @@ async def callback(client: hydrogram.Client, callback: CallbackQuery) -> None:
                 ),
             )
 
-            database.add_post(db=db, id=msg.id)
+            database.add_post(db=db, id=msg.id, shash=shash)
 
         else:
             await message.reply_text(

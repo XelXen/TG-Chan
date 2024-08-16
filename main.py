@@ -210,17 +210,19 @@ async def callback(client: hydrogram.Client, callback: CallbackQuery) -> None:
     
         if uhash in db["posts"][callback.message.id]["feedbacks"]:
             if db["posts"][callback.message.id]["feedbacks"][uhash] == database.Feedback.LIKE:
-                await callback.answer(text="You have already liked this message!")
-                return
+                dislike = 0
+                like = -1
+                db["posts"][callback.message.id]["rating"] -= 1
             else:
                 db["posts"][callback.message.id]["rating"] += 2
                 dislike = -1
+                db["posts"][callback.message.id]["feedbacks"][uhash] = database.Feedback.LIKE
+                like = 1
         else:
             db["posts"][callback.message.id]["rating"] += 1
             dislike = 0
-        
-        db["posts"][callback.message.id]["feedbacks"][uhash] = database.Feedback.LIKE
-        like = 1
+            db["posts"][callback.message.id]["feedbacks"][uhash] = database.Feedback.LIKE
+            like = 1
 
         existing_reply_markup = callback.message.reply_markup.inline_keyboard
 
@@ -242,7 +244,11 @@ async def callback(client: hydrogram.Client, callback: CallbackQuery) -> None:
         if db["posts"][callback.message.id]["rating"] >= config.PIN_LIKE_LIMIT:
             await callback.message.pin()
 
-        await callback.answer(text="Thank you for your feedback!")
+        if like == 1:
+            await callback.answer(text="Thanks for the feedback!")
+        else:
+            await callback.answer(text="Feedback removed!")
+            del db["posts"][callback.message.id]["feedbacks"][uhash]
 
     elif callback.data == "dislike":
         if callback.message.id not in db["posts"]:
@@ -251,17 +257,19 @@ async def callback(client: hydrogram.Client, callback: CallbackQuery) -> None:
     
         if uhash in db["posts"][callback.message.id]["feedbacks"]:
             if db["posts"][callback.message.id]["feedbacks"][uhash] == database.Feedback.DISLIKE:
-                await callback.answer(text="You have already disliked this message!")
-                return
+                like = 0
+                dislike = -1
+                db["posts"][callback.message.id]["rating"] += 1
             else:
                 db["posts"][callback.message.id]["rating"] -= 2
                 like = -1
+                dislike = 1
+                db["posts"][callback.message.id]["feedbacks"][uhash] = database.Feedback.DISLIKE
         else:
             db["posts"][callback.message.id]["rating"] -= 1
             like = 0
-
-        dislike = 1
-        db["posts"][callback.message.id]["feedbacks"][uhash] = database.Feedback.DISLIKE
+            dislike = 1
+            db["posts"][callback.message.id]["feedbacks"][uhash] = database.Feedback.DISLIKE
 
         existing_reply_markup = callback.message.reply_markup.inline_keyboard
 
@@ -286,7 +294,11 @@ async def callback(client: hydrogram.Client, callback: CallbackQuery) -> None:
             await callback.message.delete()
             database.remove_post(db=db, id=callback.message.id)
 
-        await callback.answer(text="Thank you for your feedback!")
+        if dislike == 1:
+            await callback.answer(text="Thanks for the feedback!")
+        else:
+            await callback.answer(text="Feedback removed!")
+            del db["posts"][callback.message.id]["feedbacks"][uhash]
 
     elif callback.data == "reply":
         if callback.message.id not in db["posts"]:

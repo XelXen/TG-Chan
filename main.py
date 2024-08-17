@@ -108,8 +108,10 @@ async def start(_, message: Message) -> None:
 
         if config.AUTOPURGE_MEDIA:
             await asyncio.sleep(config.AUTOPURGE_INTERVAL)
-            await msg.delete()
-
+            try:
+                await msg.delete()
+            except Exception:
+                return
     else:
         await message.reply_text(text=("Invalid syntax!"))
 
@@ -230,10 +232,10 @@ async def callback(client: hydrogram.Client, callback: CallbackQuery) -> None:
             for button in row:
                 if button.text.startswith("👍"):
                     current = int(button.text.split(" : ")[1])
-                    button.text = f"👍 : {current + like}"
+                    button.text = f"👍 : {current + like}" if current + like >= 0 else "👍 : 0"
                 elif button.text.startswith("👎"):
                     current = int(button.text.split(" : ")[1])
-                    button.text = f"👎 : {current + dislike}"
+                    button.text = f"👎 : {current + dislike}" if current + dislike >= 0 else "👎 : 0"
 
         await callback.message.edit_reply_markup(reply_markup=InlineKeyboardMarkup(inline_keyboard=existing_reply_markup))
 
@@ -277,10 +279,10 @@ async def callback(client: hydrogram.Client, callback: CallbackQuery) -> None:
             for button in row:
                 if button.text.startswith("👍"):
                     current = int(button.text.split(" : ")[1])
-                    button.text = f"👍 : {current + like}"
+                    button.text = f"👍 : {current + like}" if current + like >= 0 else "👍 : 0"
                 elif button.text.startswith("👎"):
                     current = int(button.text.split(" : ")[1])
-                    button.text = f"👎 : {current + dislike}"
+                    button.text = f"👎 : {current + dislike}" if current + dislike >= 0 else "👎 : 0"
 
         await callback.message.edit_reply_markup(reply_markup=InlineKeyboardMarkup(inline_keyboard=existing_reply_markup))
 

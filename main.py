@@ -118,6 +118,8 @@ async def start(_, message: Message) -> None:
 
 @app.on_message(filters=filters.private & ~filters.command(commands=["start", "delete", "privacy", "cancel"]))
 async def post(client: hydrogram.Client, message: Message) -> None:
+    ## Post Function
+
     await message.reply_text(
         text="Whenever you're ready, just click on the button down below to post your message to TG-Chan!",
         reply_markup=InlineKeyboardMarkup(
@@ -237,7 +239,10 @@ async def callback(client: hydrogram.Client, callback: CallbackQuery) -> None:
                     current = int(button.text.split(" : ")[1])
                     button.text = f"👎 : {current + dislike}" if current + dislike >= 0 else "👎 : 0"
 
-        await callback.message.edit_reply_markup(reply_markup=InlineKeyboardMarkup(inline_keyboard=existing_reply_markup))
+        try:
+            await callback.message.edit_reply_markup(reply_markup=InlineKeyboardMarkup(inline_keyboard=existing_reply_markup))
+        except Exception:
+            pass
 
         if db["posts"][callback.message.id]["rating"] >= config.AUTODELETE_LIKE_LIMIT:
             if callback.message.id in db["autodelete"]:
@@ -284,7 +289,10 @@ async def callback(client: hydrogram.Client, callback: CallbackQuery) -> None:
                     current = int(button.text.split(" : ")[1])
                     button.text = f"👎 : {current + dislike}" if current + dislike >= 0 else "👎 : 0"
 
-        await callback.message.edit_reply_markup(reply_markup=InlineKeyboardMarkup(inline_keyboard=existing_reply_markup))
+        try:
+            await callback.message.edit_reply_markup(reply_markup=InlineKeyboardMarkup(inline_keyboard=existing_reply_markup))
+        except Exception:
+            pass
 
         if db["posts"][callback.message.id]["rating"] <= -config.UNPIN_DISLIKE_LIMIT:
             await callback.message.unpin()
@@ -374,6 +382,7 @@ async def callback(client: hydrogram.Client, callback: CallbackQuery) -> None:
                     )
                 )
 
+                database.save(db=db)
                 return
 
             await message.download(file_name=f"media/{shash}.jpg")
@@ -418,6 +427,7 @@ async def callback(client: hydrogram.Client, callback: CallbackQuery) -> None:
                     )
                 )
 
+                database.save(db=db)
                 return
 
             await message.download(file_name=f"media/{shash}.mp4")
@@ -486,6 +496,7 @@ async def callback(client: hydrogram.Client, callback: CallbackQuery) -> None:
                 text=("Invalid message type! Please try again with a valid message type.")
             )
 
+            database.save(db=db)
             return
         
         db["timings"][uhash] = time.time() + config.POST_INTERVAL
@@ -501,9 +512,9 @@ async def callback(client: hydrogram.Client, callback: CallbackQuery) -> None:
 
     else:
         await callback.answer(text="Invalid action!")
-        return
 
-    database.save(db=db)
+        database.save(db=db)
+        return
 
 
 @app.on_message(filters=filters.command(commands=["cancel"]))

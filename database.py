@@ -71,6 +71,9 @@ def remove_post(db: DatabaseType, id: int) -> None:
         db["autodelete"].remove(id)
 
     if db["posts"][id]["media"] is not None:
-        os.remove(db["posts"][id]["media"])
+        try:
+            os.remove(db["posts"][id]["media"])
+        except FileNotFoundError:
+            pass
 
     del db["posts"][id]

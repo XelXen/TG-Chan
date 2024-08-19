@@ -10,6 +10,7 @@ import re
 import random
 
 from hydrogram import filters
+from hydrogram.methods.utilities.idle import idle
 from hydrogram.types import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -27,6 +28,18 @@ app = hydrogram.Client(
     api_hash=config.API_HASH,
     bot_token=config.BOT_TOKEN,
 )
+
+p_app = hydrogram.Client(
+    name="p_" + config.NAME,
+    api_id=config.API_ID,
+    api_hash=config.API_HASH,
+)
+
+loop = asyncio.get_event_loop()
+run = loop.run_until_complete
+
+run(app.start())
+run(p_app.start())
 
 reply_mode: Dict[str, int] = {}
 
@@ -174,7 +187,7 @@ async def delete(client: hydrogram.Client, message: Message) -> None:
 
         return
 
-    await client.delete_messages(
+    await p_app.delete_messages(
         chat_id=config.POST_ID,
         message_ids=msg.id,
     )
@@ -301,7 +314,10 @@ async def callback(client: hydrogram.Client, callback: CallbackQuery) -> None:
             if callback.message.id in db["autodelete"]:
                 del db["autodelete"][callback.message.id]
 
-            await callback.message.delete()
+            await p_app.delete_messages(
+                chat_id=config.POST_ID,
+                message_ids=callback.message.id,
+            )
             database.remove_post(db=db, id=callback.message.id)
 
         if dislike == 1:
@@ -367,7 +383,7 @@ async def callback(client: hydrogram.Client, callback: CallbackQuery) -> None:
 
             printlog(text=f"Auto-deleting message with id {db['autodelete'][0]}!")
 
-            await client.delete_messages(
+            await p_app.delete_messages(
                 chat_id=config.POST_ID,
                 message_ids=msg_id,
             )
@@ -515,6 +531,8 @@ async def callback(client: hydrogram.Client, callback: CallbackQuery) -> None:
 
         database.save(db=db)
         return
+    
+    database.save(db=db)
 
 
 @app.on_message(filters=filters.command(commands=["cancel"]))
@@ -529,7 +547,9 @@ async def cancel(_: hydrogram.Client, message: Message) -> None:
 
 
 # Run the Bot
+print("Bot is running!")
 
-if __name__ == "__main__":
-    print("Bot is running!")
-    app.run()
+run(idle())
+
+run(app.stop())
+run(p_app.stop())

@@ -129,7 +129,10 @@ async def start(_, message: Message) -> None:
         await message.reply_text(text=("Invalid syntax!"))
 
 
-@app.on_message(filters=filters.private & ~filters.command(commands=["start", "delete", "privacy", "cancel"]))
+@app.on_message(
+    filters=filters.private
+    & ~filters.command(commands=["start", "delete", "privacy", "cancel"])
+)
 async def post(client: hydrogram.Client, message: Message) -> None:
     ## Post Function
 
@@ -189,7 +192,10 @@ async def delete(client: hydrogram.Client, message: Message) -> None:
 
         return
 
-    if (shash != database.hash(num=message.from_user.id + int(message.command[2])) and message.from_user.id != config.OWNER_ID):
+    if (
+        shash != database.hash(num=message.from_user.id + int(message.command[2]))
+        and message.from_user.id != config.OWNER_ID
+    ):
         await message.reply_text(
             text=(
                 "You are not authorized to delete this message! Please try again with a valid message id."
@@ -235,21 +241,28 @@ async def callback(client: hydrogram.Client, callback: CallbackQuery) -> None:
         if callback.message.id not in db["posts"]:
             await callback.answer(text="Invalid message!")
             return
-    
+
         if uhash in db["posts"][callback.message.id]["feedbacks"]:
-            if db["posts"][callback.message.id]["feedbacks"][uhash] == database.Feedback.LIKE:
+            if (
+                db["posts"][callback.message.id]["feedbacks"][uhash]
+                == database.Feedback.LIKE
+            ):
                 dislike = 0
                 like = -1
                 db["posts"][callback.message.id]["rating"] -= 1
             else:
                 db["posts"][callback.message.id]["rating"] += 2
                 dislike = -1
-                db["posts"][callback.message.id]["feedbacks"][uhash] = database.Feedback.LIKE
+                db["posts"][callback.message.id]["feedbacks"][
+                    uhash
+                ] = database.Feedback.LIKE
                 like = 1
         else:
             db["posts"][callback.message.id]["rating"] += 1
             dislike = 0
-            db["posts"][callback.message.id]["feedbacks"][uhash] = database.Feedback.LIKE
+            db["posts"][callback.message.id]["feedbacks"][
+                uhash
+            ] = database.Feedback.LIKE
             like = 1
 
         existing_reply_markup = callback.message.reply_markup.inline_keyboard
@@ -258,20 +271,28 @@ async def callback(client: hydrogram.Client, callback: CallbackQuery) -> None:
             for button in row:
                 if button.text.startswith("👍"):
                     current = int(button.text.split(" : ")[1])
-                    button.text = f"👍 : {current + like}" if current + like >= 0 else "👍 : 0"
+                    button.text = (
+                        f"👍 : {current + like}" if current + like >= 0 else "👍 : 0"
+                    )
                 elif button.text.startswith("👎"):
                     current = int(button.text.split(" : ")[1])
-                    button.text = f"👎 : {current + dislike}" if current + dislike >= 0 else "👎 : 0"
+                    button.text = (
+                        f"👎 : {current + dislike}"
+                        if current + dislike >= 0
+                        else "👎 : 0"
+                    )
 
         try:
-            await callback.message.edit_reply_markup(reply_markup=InlineKeyboardMarkup(inline_keyboard=existing_reply_markup))
+            await callback.message.edit_reply_markup(
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=existing_reply_markup)
+            )
         except Exception:
             pass
 
         if db["posts"][callback.message.id]["rating"] >= config.AUTODELETE_LIKE_LIMIT:
             if callback.message.id in db["autodelete"]:
                 del db["autodelete"][callback.message.id]
-            
+
         if db["posts"][callback.message.id]["rating"] >= config.PIN_LIKE_LIMIT:
             await callback.message.pin()
 
@@ -285,9 +306,12 @@ async def callback(client: hydrogram.Client, callback: CallbackQuery) -> None:
         if callback.message.id not in db["posts"]:
             await callback.answer(text="Invalid message!")
             return
-    
+
         if uhash in db["posts"][callback.message.id]["feedbacks"]:
-            if db["posts"][callback.message.id]["feedbacks"][uhash] == database.Feedback.DISLIKE:
+            if (
+                db["posts"][callback.message.id]["feedbacks"][uhash]
+                == database.Feedback.DISLIKE
+            ):
                 like = 0
                 dislike = -1
                 db["posts"][callback.message.id]["rating"] += 1
@@ -295,12 +319,16 @@ async def callback(client: hydrogram.Client, callback: CallbackQuery) -> None:
                 db["posts"][callback.message.id]["rating"] -= 2
                 like = -1
                 dislike = 1
-                db["posts"][callback.message.id]["feedbacks"][uhash] = database.Feedback.DISLIKE
+                db["posts"][callback.message.id]["feedbacks"][
+                    uhash
+                ] = database.Feedback.DISLIKE
         else:
             db["posts"][callback.message.id]["rating"] -= 1
             like = 0
             dislike = 1
-            db["posts"][callback.message.id]["feedbacks"][uhash] = database.Feedback.DISLIKE
+            db["posts"][callback.message.id]["feedbacks"][
+                uhash
+            ] = database.Feedback.DISLIKE
 
         existing_reply_markup = callback.message.reply_markup.inline_keyboard
 
@@ -308,13 +336,21 @@ async def callback(client: hydrogram.Client, callback: CallbackQuery) -> None:
             for button in row:
                 if button.text.startswith("👍"):
                     current = int(button.text.split(" : ")[1])
-                    button.text = f"👍 : {current + like}" if current + like >= 0 else "👍 : 0"
+                    button.text = (
+                        f"👍 : {current + like}" if current + like >= 0 else "👍 : 0"
+                    )
                 elif button.text.startswith("👎"):
                     current = int(button.text.split(" : ")[1])
-                    button.text = f"👎 : {current + dislike}" if current + dislike >= 0 else "👎 : 0"
+                    button.text = (
+                        f"👎 : {current + dislike}"
+                        if current + dislike >= 0
+                        else "👎 : 0"
+                    )
 
         try:
-            await callback.message.edit_reply_markup(reply_markup=InlineKeyboardMarkup(inline_keyboard=existing_reply_markup))
+            await callback.message.edit_reply_markup(
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=existing_reply_markup)
+            )
         except Exception:
             pass
 
@@ -344,10 +380,12 @@ async def callback(client: hydrogram.Client, callback: CallbackQuery) -> None:
 
         reply_mode[uhash] = callback.message.id
 
-        await callback.answer(text="Reply mode activated! Please send your reply message via bot. You can exit reply mode by sending /cancel.")
+        await callback.answer(
+            text="Reply mode activated! Please send your reply message via bot. You can exit reply mode by sending /cancel."
+        )
 
         return
-    
+
     elif callback.data == "post":
         ## Post Function
 
@@ -356,9 +394,7 @@ async def callback(client: hydrogram.Client, callback: CallbackQuery) -> None:
         if uhash in db["timings"] and callback.from_user.id != config.OWNER_ID:
             if db["timings"][uhash] > time.time():
                 await callback.answer(
-                    text=(
-                        "Please wait for a while before posting another message!"
-                    )
+                    text=("Please wait for a while before posting another message!")
                 )
 
                 return
@@ -417,7 +453,11 @@ async def callback(client: hydrogram.Client, callback: CallbackQuery) -> None:
             msg = await client.send_message(
                 reply_to_message_id=reply_id,
                 chat_id=config.POST_ID,
-                text=message.caption + f"\n\nHash: {shash}" if message.caption else f"\n\nHash: {shash}",
+                text=(
+                    message.caption + f"\n\nHash: {shash}"
+                    if message.caption
+                    else f"\n\nHash: {shash}"
+                ),
                 reply_markup=InlineKeyboardMarkup(
                     inline_keyboard=[
                         [
@@ -462,7 +502,11 @@ async def callback(client: hydrogram.Client, callback: CallbackQuery) -> None:
             msg = await client.send_message(
                 reply_to_message_id=reply_id,
                 chat_id=config.POST_ID,
-                text=message.caption + f"\n\nHash: {shash}" if message.caption else f"\n\nHash: {shash}",
+                text=(
+                    message.caption + f"\n\nHash: {shash}"
+                    if message.caption
+                    else f"\n\nHash: {shash}"
+                ),
                 reply_markup=InlineKeyboardMarkup(
                     inline_keyboard=[
                         [
@@ -520,12 +564,14 @@ async def callback(client: hydrogram.Client, callback: CallbackQuery) -> None:
 
         else:
             await message.reply_text(
-                text=("Invalid message type! Please try again with a valid message type.")
+                text=(
+                    "Invalid message type! Please try again with a valid message type."
+                )
             )
 
             database.save(db=db)
             return
-        
+
         db["timings"][uhash] = time.time() + config.POST_INTERVAL
         db["autodelete"].append(msg.id)
 
@@ -542,7 +588,7 @@ async def callback(client: hydrogram.Client, callback: CallbackQuery) -> None:
 
         database.save(db=db)
         return
-    
+
     database.save(db=db)
 
 

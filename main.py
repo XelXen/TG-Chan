@@ -133,8 +133,19 @@ async def start(_, message: Message) -> None:
 async def post(client: hydrogram.Client, message: Message) -> None:
     ## Post Function
 
+    uhash = database.hash(num=message.from_user.id)
+    text = "When you're ready, just click on the button down below to post your reply to TG-Chan!"
+
+    if uhash in reply_mode:
+        msg = await client.get_messages(
+            chat_id=config.POST_ID,
+            message_ids=reply_mode[uhash],
+        )
+
+        text += f"\n\nCurrently replying to the following message: {msg.link}"
+
     await message.reply_text(
-        text="Whenever you're ready, just click on the button down below to post your message to TG-Chan!",
+        text=text,
         reply_markup=InlineKeyboardMarkup(
             inline_keyboard=[
                 [

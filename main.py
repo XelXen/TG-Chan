@@ -454,7 +454,7 @@ async def callback(client: hydrogram.Client, callback: CallbackQuery) -> None:
                 reply_to_message_id=reply_id,
                 chat_id=config.POST_ID,
                 text=(
-                    message.caption + f"\n\nHash: {shash}"
+                    message.caption.markdown + f"\n\nHash: {shash}"
                     if message.caption
                     else f"\n\nHash: {shash}"
                 ),
@@ -503,8 +503,8 @@ async def callback(client: hydrogram.Client, callback: CallbackQuery) -> None:
                 reply_to_message_id=reply_id,
                 chat_id=config.POST_ID,
                 text=(
-                    message.caption + f"\n\nHash: {shash}"
-                    if message.caption
+                    message.caption.markdown + f"\n\nHash: {shash}"
+                    if message.text
                     else f"\n\nHash: {shash}"
                 ),
                 reply_markup=InlineKeyboardMarkup(
@@ -539,7 +539,7 @@ async def callback(client: hydrogram.Client, callback: CallbackQuery) -> None:
             msg = await client.send_message(
                 reply_to_message_id=reply_id,
                 chat_id=config.POST_ID,
-                text=message.text + f"\n\nHash: {shash}",
+                text=message.text.markdown + f"\n\nHash: {shash}",
                 reply_markup=InlineKeyboardMarkup(
                     inline_keyboard=[
                         [

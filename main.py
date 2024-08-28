@@ -504,7 +504,7 @@ async def callback(client: hydrogram.Client, callback: CallbackQuery) -> None:
                 chat_id=config.POST_ID,
                 text=(
                     message.caption.markdown + f"\n\nHash: {shash}"
-                    if message.text
+                    if message.caption
                     else f"\n\nHash: {shash}"
                 ),
                 reply_markup=InlineKeyboardMarkup(

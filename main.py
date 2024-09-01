@@ -193,7 +193,7 @@ async def delete(client: hydrogram.Client, message: Message) -> None:
         return
 
     if (
-        shash != database.hash(num=message.from_user.id + int(message.command[2]))
+        shash != database.hash(num=message.from_user.id + int(message.command[2]) - config.SEED)
         and message.from_user.id != config.OWNER_ID
     ):
         await message.reply_text(
@@ -400,6 +400,8 @@ async def callback(client: hydrogram.Client, callback: CallbackQuery) -> None:
                 return
             else:
                 del db["timings"][uhash]
+        else:
+            db["timings"][uhash] = time.time() + config.POST_INTERVAL
 
         seed = random.randint(a=-999_999, b=999_999)
         shash = database.hash(num=callback.from_user.id + seed)
@@ -572,12 +574,11 @@ async def callback(client: hydrogram.Client, callback: CallbackQuery) -> None:
             database.save(db=db)
             return
 
-        db["timings"][uhash] = time.time() + config.POST_INTERVAL
         db["autodelete"].append(msg.id)
 
         await callback.message.edit_text(
             text=(
-                f"Your [message](https://t.me/{config.POST_USERNAME}/{msg.id}) has been successfully posted!\n\nTo delete your post, use the `/delete {msg.id} {seed}` command."
+                f"Your [message](https://t.me/{config.POST_USERNAME}/{msg.id}) has been successfully posted!\n\nTo delete your post, use the `/delete {msg.id} {seed + config.SEED}` command."
             )
         )
 

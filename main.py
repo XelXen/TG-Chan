@@ -1,613 +1,497 @@
-# Import Core Libraries
-
-import hydrogram
-import time
-import config
-import database
-import asyncio
-import os
+# Import required libraries
 import re
+import time
+import pyrogram as tg
+from AShelve import AShelve
+import config
+import hashlib
 import random
+from rate_limiter import RateLimiter
+import logging
 
-from hydrogram import filters
-from hydrogram.methods.utilities.idle import idle
-from hydrogram.types import (
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-    CallbackQuery,
-    Message,
+# Configure basic logging with a FileHandler (which is thread‑safe)
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(asctime)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    handlers=[
+        logging.FileHandler(config.LOG_FILE),
+        logging.StreamHandler(),
+    ],
 )
-from typing import Dict
+
+logger = logging.getLogger(__name__)
 
 
-# Initialize Client and Setup Memory
+# Initialize the backend
+blacklist = AShelve(config.BLACKLIST_FILE)
+seedlist = AShelve(config.SEEDLIST_FILE)
+nicknames = AShelve(config.NICKNAMES_FILE)
+rate_limiter = RateLimiter()
+reply_to_cache: dict[int, int] = {}
 
-app = hydrogram.Client(
-    name=config.NAME,
+
+# Initialize the client
+app = tg.Client(
+    name=config.SESSION_NAME,
     api_id=config.API_ID,
     api_hash=config.API_HASH,
     bot_token=config.BOT_TOKEN,
 )
 
-p_app = hydrogram.Client(
-    name="p_" + config.NAME,
-    api_id=config.API_ID,
-    api_hash=config.API_HASH,
-)
 
-loop = asyncio.get_event_loop()
-run = loop.run_until_complete
-
-run(app.start())
-run(p_app.start())
-
-reply_mode: Dict[str, int] = {}
+# Hashing function
+def hash(value: int, seed: int = 0) -> tuple[str, int]:
+    seed = random.randint(1, 100000000) if seed == -1 else seed
+    return hashlib.sha3_224(string=str(value + seed).encode()).hexdigest(), seed
 
 
-# Define Core functions
-
-
-def sanitize_str(string: str) -> str:
-    ## Sanitizes the string by only allowing alphanumeric characters and hyphens
-
-    return re.sub(pattern=r"[^a-zA-Z0-9-]", repl="", string=string)
-
-
-def printlog(text: str) -> None:
-    ## Prints the text to the console and logs it to a file
-
-    print(text)
-
-    if not os.path.exists("logs"):
-        os.mkdir("logs")
-
-    name = os.path.join("logs", time.strftime("%Y%m%d") + ".log")
-
-    with open(file=name, mode="a") as f:
-        f.write(f"[{time.strftime("%Y-%m-%d %H:%M:%S")}] {text}\n")
-
-
-# Define Callback Functions
-
-
-@app.on_message(filters=filters.command(commands=["start"]))
-async def start(_, message: Message) -> None:
-    if len(message.command) == 1:
-        ## Intro Function
-
-        await message.reply_text(
-            text="Hello there! I am TG-Chan Posting Bot. I can help you post anonymous messages to TG-Chan.\n\nTo get started, just send me a message to post on TG-Chan, to reply to an existing post, you can just click on the reply button on that post and send me a reply message\n\nYou can view the privacy policy using the /privacy command."
-        )
-
-    elif len(message.command) == 2:
-        ## Media Function
-
-        file_path = "media/" + sanitize_str(string=message.command[1])
-
-        if file_path.endswith("-jpg"):
-            file_path = file_path[:-4] + ".jpg"
-            extension = "jpg"
-        elif file_path.endswith("-mp4"):
-            file_path = file_path[:-4] + ".mp4"
-            extension = "mp4"
-        else:
-            extension = None
-
-        if not os.path.exists(file_path):
-            await message.reply_text(
-                text=("Invalid media key! Please try again with a valid media key.")
-            )
-            return
-
-        if extension == "jpg":
-            msg = await message.reply_photo(
-                photo=file_path,
-                caption=(
-                    f"Here is the photo you requested. It will be deleted in {config.AUTOPURGE_INTERVAL} seconds."
-                    if config.AUTOPURGE_MEDIA
-                    else "Here is the photo you requested."
-                ),
-            )
-
-        elif extension == "mp4":
-            msg = await message.reply_video(
-                video=file_path,
-                caption=(
-                    f"Here is the video you requested. It will be deleted in {config.AUTOPURGE_INTERVAL} seconds."
-                    if config.AUTOPURGE_MEDIA
-                    else "Here is the video you requested."
-                ),
-            )
-
-        if config.AUTOPURGE_MEDIA:
-            await asyncio.sleep(config.AUTOPURGE_INTERVAL)
-            try:
-                await msg.delete()
-            except Exception:
-                return
-    else:
-        await message.reply_text(text=("Invalid syntax!"))
+# ---| Post Generator Function |---
 
 
 @app.on_message(
-    filters=filters.private
-    & ~filters.command(commands=["start", "delete", "privacy", "cancel"])
+    tg.filters.private
+    & ~tg.filters.command(["start", "info", "nick", "privacy", "delete"])
 )
-async def post(client: hydrogram.Client, message: Message) -> None:
-    ## Post Function
-
-    uhash = database.hash(num=message.from_user.id)
-    text = "When you're ready, just click on the button down below to post your reply to TG-Chan!"
-
-    if uhash in reply_mode:
-        msg = await client.get_messages(
-            chat_id=config.POST_ID,
-            message_ids=reply_mode[uhash],
-        )
-
-        text += f"\n\nCurrently replying to the following message: {msg.link}"
-
-    await message.reply_text(
-        text=text,
-        reply_markup=InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text="Post",
-                        callback_data="post",
-                    ),
-                ],
-            ],
-        ),
-        reply_to_message_id=message.id,
-    )
-
-
-@app.on_message(filters=filters.command(commands=["delete"]))
-async def delete(client: hydrogram.Client, message: Message) -> None:
-    db = database.load()
-
-    if len(message.command) != 3:
-        await message.reply_text(text=("Invalid syntax!"))
+async def text_handler(_, message: tg.types.Message):
+    if await rate_limiter.acquire(message.from_user.id, "text", config.COOLDOWN_READ):
         return
+    try:
+        uhash, _ = hash(message.from_user.id)
 
-    elif (
-        not message.command[1].isdigit()
-        or not message.command[2].replace("-", "").isnumeric()
-    ):
-        await message.reply_text(text=("Invalid command!"))
+        if await seedlist.get(uhash, None) is None:
+            if await blacklist.get(uhash, False):
+                return
+
+            await message.reply_text("Please use /start to first regenerate your seed.")
+            return
+
+        await message.reply_text(
+            "Ready to post your message? Click the button down below to proceed, or keep editing if you're not satisfied.",
+            reply_markup=tg.types.InlineKeyboardMarkup(
+                [
+                    [
+                        tg.types.InlineKeyboardButton("Post", callback_data="post"),
+                        tg.types.InlineKeyboardButton(
+                            "Post (Anonymously)", callback_data="post_anon"
+                        ),
+                    ],
+                    [tg.types.InlineKeyboardButton("Cancel", callback_data="cancel")],
+                ],
+            ),
+            reply_to_message_id=message.id,
+        )
+    except Exception as e:
+        logger.warning(e)
+    finally:
+        await rate_limiter.release(message.from_user.id)
+
+
+# ---| Command Handlers |---
+
+
+# Start command handler
+@app.on_message(tg.filters.command("start") & tg.filters.private)
+async def start_command(_, message: tg.types.Message):
+    if await rate_limiter.acquire(message.from_user.id, "start", config.COOLDOWN_WRITE):
+        return
+    try:
+        uhash, _ = hash(message.from_user.id)
+
+        if await seedlist.get(uhash, None) is None:
+            if await blacklist.get(uhash, False):
+                return
+
+            _, seed = hash(message.from_user.id, seed=-1)
+            await seedlist.set(uhash, seed)
+            await nicknames.set(uhash, "User")
+
+            logger.info(f"A new user ({uhash[:6]}...) has been registered.")
+
+        await message.reply_text(
+            "Hi there! I am TG-Chan Handler Bot, and I can help you post messages on TG-Chan. **To post a message, just leave your message here :D**\n\nAdditional Commands:\n\n/info - Get your current hash, seed, and nickname\n/nick [x] - Change your nickname to [x] (ASCII symbols only)\n/privacy - Privacy Policy\n/delete [s] - Delete your stored data (To confirm, type your seed [s] after the command)\n\nIf you have any further questions, join @WazeChats",
+        )
+    except Exception as e:
+        logger.warning(e)
+    finally:
+        await rate_limiter.release(message.from_user.id)
+
+
+# Info command handler
+@app.on_message(tg.filters.command("info") & tg.filters.private)
+async def info_command(_, message: tg.types.Message):
+    if await rate_limiter.acquire(message.from_user.id, "info", config.COOLDOWN_READ):
         return
 
     try:
-        msg = await client.get_messages(
-            chat_id=config.POST_ID,
-            message_ids=int(message.command[1]),
-        )
+        uhash, _ = hash(message.from_user.id)
 
-        shash = db["posts"][msg.id]["shash"]
-    except Exception:
+        if (seed := await seedlist.get(uhash, None)) is None:
+            if await blacklist.get(uhash, False):
+                return
+
+            await message.reply_text("Please use /start to first regenerate your seed.")
+            return
+
+        nickname = await nicknames.get(uhash)
+        shash, _ = hash(message.from_user.id, seed=seed)
+
         await message.reply_text(
-            text=("Invalid message id! Please try again with a valid message id.")
+            f"**User Hash:** `{shash}`\n**Seed:** `{seed}`\n**Nickname:** `{nickname}`",
+            reply_markup=tg.types.InlineKeyboardMarkup([
+                [
+                    tg.types.InlineKeyboardButton(
+                        "Regenerate Seed", callback_data="rehash"
+                    )
+                ]
+            ]),
         )
+    except Exception as e:
+        logger.warning(e)
+    finally:
+        await rate_limiter.release(message.from_user.id)
 
+
+# Nick command handler
+@app.on_message(tg.filters.command("nick") & tg.filters.private)
+async def nick_command(_, message: tg.types.Message):
+    if await rate_limiter.acquire(message.from_user.id, "nick", config.COOLDOWN_WRITE):
         return
 
-    if (
-        shash != database.hash(num=message.from_user.id + int(message.command[2]) - config.SEED)
-        and message.from_user.id != config.OWNER_ID
-    ):
-        await message.reply_text(
-            text=(
-                "You are not authorized to delete this message! Please try again with a valid message id."
-            )
-        )
+    try:
+        uhash, _ = hash(message.from_user.id)
 
-        return
-
-    await p_app.delete_messages(
-        chat_id=config.POST_ID,
-        message_ids=msg.id,
-    )
-
-    database.remove_post(db=db, id=msg.id)
-
-    await message.reply_text(text=("The message has been successfully deleted!"))
-
-    printlog(f"User {shash} deleted a message with id {msg.id}!")
-
-    database.save(db=db)
-
-
-@app.on_message(filters=filters.command(commands=["privacy"]))
-async def privacy(_: hydrogram.Client, message: Message) -> None:
-    await message.reply_text(
-        text=(
-            "Privacy Policy:\n\n"
-            "1. Your messages are posted anonymously and are linked to your hash.\n"
-            "2. Your user id is not stored or used for any purpose other than generating your hash.\n"
-            "3. Your messages are not used for any other purpose than posting on TG-Chan.\n"
-            "4. Your messages are not used to track you or your activities on the bot.\n"
-            "5. Your hashes are generated in real-time for authentication and stored only for feedbacks.\n"
-        ),
-    )
-
-
-@app.on_callback_query()
-async def callback(client: hydrogram.Client, callback: CallbackQuery) -> None:
-    db = database.load()
-    uhash = database.hash(num=callback.from_user.id)
-
-    if callback.data == "like":
-        if callback.message.id not in db["posts"]:
-            await callback.answer(text="Invalid message!")
-            return
-
-        if uhash in db["posts"][callback.message.id]["feedbacks"]:
-            if (
-                db["posts"][callback.message.id]["feedbacks"][uhash]
-                == database.Feedback.LIKE
-            ):
-                dislike = 0
-                like = -1
-                db["posts"][callback.message.id]["rating"] -= 1
-            else:
-                db["posts"][callback.message.id]["rating"] += 2
-                dislike = -1
-                db["posts"][callback.message.id]["feedbacks"][
-                    uhash
-                ] = database.Feedback.LIKE
-                like = 1
-        else:
-            db["posts"][callback.message.id]["rating"] += 1
-            dislike = 0
-            db["posts"][callback.message.id]["feedbacks"][
-                uhash
-            ] = database.Feedback.LIKE
-            like = 1
-
-        existing_reply_markup = callback.message.reply_markup.inline_keyboard
-
-        for row in existing_reply_markup:
-            for button in row:
-                if button.text.startswith("👍"):
-                    current = int(button.text.split(" : ")[1])
-                    button.text = (
-                        f"👍 : {current + like}" if current + like >= 0 else "👍 : 0"
-                    )
-                elif button.text.startswith("👎"):
-                    current = int(button.text.split(" : ")[1])
-                    button.text = (
-                        f"👎 : {current + dislike}"
-                        if current + dislike >= 0
-                        else "👎 : 0"
-                    )
-
-        try:
-            await callback.message.edit_reply_markup(
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=existing_reply_markup)
-            )
-        except Exception:
-            pass
-
-        if db["posts"][callback.message.id]["rating"] >= config.AUTODELETE_LIKE_LIMIT:
-            if callback.message.id in db["autodelete"]:
-                del db["autodelete"][callback.message.id]
-
-        if db["posts"][callback.message.id]["rating"] >= config.PIN_LIKE_LIMIT:
-            await callback.message.pin()
-
-        if like == 1:
-            await callback.answer(text="Thanks for the feedback!")
-        else:
-            await callback.answer(text="Feedback removed!")
-            del db["posts"][callback.message.id]["feedbacks"][uhash]
-
-    elif callback.data == "dislike":
-        if callback.message.id not in db["posts"]:
-            await callback.answer(text="Invalid message!")
-            return
-
-        if uhash in db["posts"][callback.message.id]["feedbacks"]:
-            if (
-                db["posts"][callback.message.id]["feedbacks"][uhash]
-                == database.Feedback.DISLIKE
-            ):
-                like = 0
-                dislike = -1
-                db["posts"][callback.message.id]["rating"] += 1
-            else:
-                db["posts"][callback.message.id]["rating"] -= 2
-                like = -1
-                dislike = 1
-                db["posts"][callback.message.id]["feedbacks"][
-                    uhash
-                ] = database.Feedback.DISLIKE
-        else:
-            db["posts"][callback.message.id]["rating"] -= 1
-            like = 0
-            dislike = 1
-            db["posts"][callback.message.id]["feedbacks"][
-                uhash
-            ] = database.Feedback.DISLIKE
-
-        existing_reply_markup = callback.message.reply_markup.inline_keyboard
-
-        for row in existing_reply_markup:
-            for button in row:
-                if button.text.startswith("👍"):
-                    current = int(button.text.split(" : ")[1])
-                    button.text = (
-                        f"👍 : {current + like}" if current + like >= 0 else "👍 : 0"
-                    )
-                elif button.text.startswith("👎"):
-                    current = int(button.text.split(" : ")[1])
-                    button.text = (
-                        f"👎 : {current + dislike}"
-                        if current + dislike >= 0
-                        else "👎 : 0"
-                    )
-
-        try:
-            await callback.message.edit_reply_markup(
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=existing_reply_markup)
-            )
-        except Exception:
-            pass
-
-        if db["posts"][callback.message.id]["rating"] <= -config.UNPIN_DISLIKE_LIMIT:
-            await callback.message.unpin()
-
-        if db["posts"][callback.message.id]["rating"] <= -config.DELETE_DISLIKE_LIMIT:
-            if callback.message.id in db["autodelete"]:
-                del db["autodelete"][callback.message.id]
-
-            await p_app.delete_messages(
-                chat_id=config.POST_ID,
-                message_ids=callback.message.id,
-            )
-            database.remove_post(db=db, id=callback.message.id)
-
-        if dislike == 1:
-            await callback.answer(text="Thanks for the feedback!")
-        else:
-            await callback.answer(text="Feedback removed!")
-            del db["posts"][callback.message.id]["feedbacks"][uhash]
-
-    elif callback.data == "reply":
-        if callback.message.id not in db["posts"]:
-            await callback.answer(text="Invalid message!")
-            return
-
-        reply_mode[uhash] = callback.message.id
-
-        await callback.answer(
-            text="Reply mode activated! Please send your reply message via bot. You can exit reply mode by sending /cancel."
-        )
-
-        return
-
-    elif callback.data == "post":
-        ## Post Function
-
-        uhash = database.hash(num=callback.from_user.id)
-
-        if uhash in db["timings"] and callback.from_user.id != config.OWNER_ID:
-            if db["timings"][uhash] > time.time():
-                await callback.answer(
-                    text=("Please wait for a while before posting another message!")
-                )
-
-                return
-            else:
-                del db["timings"][uhash]
-        else:
-            db["timings"][uhash] = time.time() + config.POST_INTERVAL
-
-        seed = random.randint(a=-999_999, b=999_999)
-        shash = database.hash(num=callback.from_user.id + seed)
-
-        reply_id = reply_mode.pop(uhash) if uhash in reply_mode else None
-        try:
-            if reply_id is not None:
-                await client.get_messages(
-                    chat_id=config.POST_ID,
-                    message_ids=reply_id,
-                )
-        except Exception as e:
-            print(f"Error: {e}")
-            await callback.answer(
-                text=("Invalid reply id! Please try again with a valid reply id.")
-            )
-            return
-
-        if len(db["autodelete"]) >= config.AUTODELETE_COUNT:
-            if reply_id == db["autodelete"][0]:
-                await callback.answer(
-                    "Reply message is in the auto-delete queue! Please try again with a different message."
-                )
-                del db["reply_mode"][uhash]
-
-            msg_id = db["autodelete"].pop(0)
-            database.remove_post(db=db, id=msg_id)
-
-            printlog(text=f"Auto-deleting message with id {db['autodelete'][0]}!")
-
-            await p_app.delete_messages(
-                chat_id=config.POST_ID,
-                message_ids=msg_id,
-            )
-
-        message = callback.message.reply_to_message
-
-        if message.photo:
-            if message.photo.file_size > config.MAX_IMAGE_SIZE:
-                await message.reply_text(
-                    text=(
-                        "The image size is too large! Please try again with a smaller/compressed image or add a link to the image instead."
-                    )
-                )
-
-                database.save(db=db)
+        if await seedlist.get(uhash, None) is None:
+            if await blacklist.get(uhash, False):
                 return
 
-            await message.download(file_name=f"media/{shash}.jpg")
+            await message.reply_text("Please use /start to first regenerate your seed.")
+            return
 
-            msg = await client.send_message(
-                reply_to_message_id=reply_id,
-                chat_id=config.POST_ID,
-                text=(
-                    message.caption.markdown + f"\n\nHash: {shash}"
-                    if message.caption
-                    else f"\n\nHash: {shash}"
-                ),
-                reply_markup=InlineKeyboardMarkup(
-                    inline_keyboard=[
-                        [
-                            InlineKeyboardButton(
-                                text="View attached photo",
-                                url=f"https://t.me/{config.BOT_USERNAME}?start={shash}-jpg",
-                            ),
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                text="👍 : 0",
-                                callback_data="like",
-                            ),
-                            InlineKeyboardButton(
-                                text="👎 : 0",
-                                callback_data="dislike",
-                            ),
-                            InlineKeyboardButton(
-                                text="Reply",
-                                callback_data="reply",
-                            ),
-                        ],
-                    ],
-                ),
-            )
+        nickname = " ".join(message.command[1:])
 
-            database.add_post(db=db, id=msg.id, media=f"media/{shash}.jpg", shash=shash)
-
-        elif message.video:
-            if message.video.file_size > config.MAX_VIDEO_SIZE:
-                await message.reply_text(
-                    text=(
-                        "The video size is too large! Please try again with a smaller/compressed video or add a link to the video instead."
-                    )
-                )
-
-                database.save(db=db)
-                return
-
-            await message.download(file_name=f"media/{shash}.mp4")
-
-            msg = await client.send_message(
-                reply_to_message_id=reply_id,
-                chat_id=config.POST_ID,
-                text=(
-                    message.caption.markdown + f"\n\nHash: {shash}"
-                    if message.caption
-                    else f"\n\nHash: {shash}"
-                ),
-                reply_markup=InlineKeyboardMarkup(
-                    inline_keyboard=[
-                        [
-                            InlineKeyboardButton(
-                                text="View attached video",
-                                url=f"https://t.me/{config.BOT_USERNAME}?start={shash}-mp4",
-                            ),
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                text="👍 : 0",
-                                callback_data="like",
-                            ),
-                            InlineKeyboardButton(
-                                text="👎 : 0",
-                                callback_data="dislike",
-                            ),
-                            InlineKeyboardButton(
-                                text="Reply",
-                                callback_data="reply",
-                            ),
-                        ],
-                    ],
-                ),
-            )
-
-            database.add_post(db=db, id=msg.id, media=f"media/{shash}.mp4", shash=shash)
-
-        elif message.text:
-            msg = await client.send_message(
-                reply_to_message_id=reply_id,
-                chat_id=config.POST_ID,
-                text=message.text.markdown + f"\n\nHash: {shash}",
-                reply_markup=InlineKeyboardMarkup(
-                    inline_keyboard=[
-                        [
-                            InlineKeyboardButton(
-                                text="👍 : 0",
-                                callback_data="like",
-                            ),
-                            InlineKeyboardButton(
-                                text="👎 : 0",
-                                callback_data="dislike",
-                            ),
-                            InlineKeyboardButton(
-                                text="Reply",
-                                callback_data="reply",
-                            ),
-                        ],
-                    ],
-                ),
-            )
-
-            database.add_post(db=db, id=msg.id, shash=shash)
-
-        else:
+        if len(nickname) > 32 or len(nickname) < 2:
             await message.reply_text(
-                text=(
-                    "Invalid message type! Please try again with a valid message type."
-                )
+                "Invalid nickname length. Please keep it between 2 and 32 characters."
             )
-
-            database.save(db=db)
+            return
+        elif not re.match(r"^[A-Za-z0-9 _-]+$", nickname):
+            await message.reply_text("Nickname can only contain ASCII characters.")
             return
 
-        db["autodelete"].append(msg.id)
+        await nicknames.set(uhash, nickname)
+        await message.reply_text(f"Your nickname has been set to `{nickname}`.")
 
-        await callback.message.edit_text(
-            text=(
-                f"Your [message](https://t.me/{config.POST_USERNAME}/{msg.id}) has been successfully posted!\n\nTo delete your post, use the `/delete {msg.id} {seed + config.SEED}` command."
-            )
-        )
+        logger.info(f"User ({uhash[:6]}...) has set their nickname to {nickname}.")
+    except Exception as e:
+        logger.warning(e)
+    finally:
+        await rate_limiter.release(message.from_user.id)
 
-        printlog(f"{uhash} posted a message with id {msg.id}!")
 
-    else:
-        await callback.answer(text="Invalid action!")
-
-        database.save(db=db)
+# Privacy command handler
+@app.on_message(tg.filters.command("privacy") & tg.filters.private)
+async def privacy_command(_, message: tg.types.Message):
+    if await rate_limiter.acquire(
+        message.from_user.id, "privacy", config.COOLDOWN_READ
+    ):
         return
 
-    database.save(db=db)
+    try:
+        await message.reply_text(
+            "The bot does not store any personal data except for the user's hash, seed, and nickname. Everything else is computed on the go and is not stored for any longer than necessary."
+        )
+    except Exception as e:
+        logger.warning(e)
+    finally:
+        await rate_limiter.release(message.from_user.id)
 
 
-@app.on_message(filters=filters.command(commands=["cancel"]))
-async def cancel(_: hydrogram.Client, message: Message) -> None:
-    uhash = database.hash(num=message.from_user.id)
+# Delete command handler
+@app.on_message(tg.filters.command("delete") & tg.filters.private)
+async def delete_command(_, message: tg.types.Message):
+    if await rate_limiter.acquire(
+        message.from_user.id, "delete", config.COOLDOWN_WRITE
+    ):
+        return
 
-    if uhash in reply_mode:
-        del reply_mode[uhash]
-        await message.reply_text(text="Reply mode deactivated!")
-    else:
-        await message.reply_text(text="You are not in reply mode!")
+    try:
+        uhash, _ = hash(message.from_user.id)
+
+        if (seed := await seedlist.get(uhash, None)) is None:
+            if await blacklist.get(uhash, False):
+                return
+
+            await message.reply_text("User not found.")
+            return
+
+        if len(message.command) == 1:
+            await message.reply_text("Please confirm your nickname after the command.")
+            return
+        elif message.command[1] != str(seed):
+            await message.reply_text(
+                "Invalid seed. Please confirm your seed after the command."
+            )
+            return
+
+        await seedlist.delete(uhash)
+        await nicknames.delete(uhash)
+
+        logger.info(f"User ({uhash[:6]}...) has regenerated their seed.")
+
+        await message.reply_text(
+            "Your data has been deleted. To regenerate your seed, use /start."
+        )
+        logger.info(f"User ({uhash[:6]}...) has deleted their data.")
+    except Exception as e:
+        logger.warning(e)
+    finally:
+        await rate_limiter.release(message.from_user.id)
 
 
-# Run the Bot
-print("Bot is running!")
+# ---| Callback Handlers |---
 
-run(idle())
 
-run(app.stop())
-run(p_app.stop())
+# Rehash handler
+@app.on_callback_query(tg.filters.regex("rehash"))
+async def rehash(_, query: tg.types.CallbackQuery):
+    if await rate_limiter.acquire(query.from_user.id, "rehash", config.COOLDOWN_WRITE):
+        return
+
+    try:
+        uhash, _ = hash(query.from_user.id)
+
+        if await seedlist.get(uhash, None) is None:
+            if await blacklist.get(uhash, False):
+                return
+
+            await query.answer("Please use /start to regenerate your seed.")
+            return
+
+        _, seed = hash(query.from_user.id, seed=-1)
+        await seedlist.set(uhash, seed)
+        logger.info(f"User ({uhash[:6]}...) has regenerated their seed.")
+
+        await query.answer("Done!")
+        await query.message.edit_text(
+            "Your seed has been regenerated. Use /info to view the changes."
+        )
+    except Exception as e:
+        logger.warning(e)
+    finally:
+        await rate_limiter.release(query.from_user.id)
+
+
+# Cancel handler
+@app.on_callback_query(tg.filters.regex("cancel"))
+async def cancel(_, query: tg.types.CallbackQuery):
+    if await rate_limiter.acquire(query.from_user.id, "cancel", config.COOLDOWN_API):
+        return
+
+    try:
+        uhash, _ = hash(query.from_user.id)
+
+        if await blacklist.get(uhash, False):
+            return
+
+        await query.message.edit_text("Request has been cancelled.")
+    except Exception as e:
+        logger.warning(e)
+    finally:
+        await rate_limiter.release(query.from_user.id)
+
+
+# Post handler
+@app.on_callback_query(tg.filters.regex("post") | tg.filters.regex("post_anon"))
+async def post(client: tg.Client, query: tg.types.CallbackQuery):
+    if await rate_limiter.acquire(query.from_user.id, "post", config.COOLDOWN_API):
+        return
+    try:
+        uhash, _ = hash(query.from_user.id)
+
+        if (seed := await seedlist.get(uhash, None)) is None:
+            if await blacklist.get(uhash, False):
+                return
+
+            await query.answer("Please use /start to first regenerate your seed.")
+            return
+
+        msg = query.message.reply_to_message
+
+        if msg.text is not None:
+            if len(msg.text) > 4000:
+                await query.answer(
+                    "Message is too long. Please keep it under 4000 characters."
+                )
+                return
+
+            if query.data == "post_anon":
+                shash, seed = hash(query.from_user.id, seed=-1)
+                post = await client.send_message(
+                    config.CHANNEL_ID,
+                    msg.text.markdown + f"\n\n~ ({shash})",
+                )
+            else:
+                nickname = await nicknames.get(uhash)
+                shash, _ = hash(query.from_user.id, seed=seed)
+                post = await client.send_message(
+                    config.CHANNEL_ID,
+                    msg.text.markdown + f"\n\n~ {nickname} ({shash})",
+                )
+
+        elif not (msg.photo is None and msg.video is None):
+            if msg.caption is not None:
+                if len(msg.caption) > 4000:
+                    await query.answer(
+                        "Message is too long. Please keep it under 4000 characters."
+                    )
+                    return
+
+                caption = msg.caption.markdown
+            else:
+                caption = ""
+
+            if query.data == "post_anon":
+                shash, seed = hash(query.from_user.id, seed=-1)
+                post = await msg.copy(
+                    config.CHANNEL_ID,
+                    caption=caption + f"\n\n~ ({shash})",
+                    has_spoiler=True,
+                )
+            else:
+                seed = await seedlist.get(uhash)
+                nickname = await nicknames.get(uhash)
+                shash, _ = hash(query.from_user.id, seed=seed)
+                post = await msg.copy(
+                    config.CHANNEL_ID,
+                    caption=caption + f"\n\n~ {nickname} ({shash})",
+                    has_spoiler=True,
+                )
+        else:
+            await query.answer("Invalid message")
+            return
+
+        logger.info(f"User ({uhash[:6]}...) has posted a message.")
+        await query.answer("Message has been posted!")
+        await query.message.edit_text(
+            "Message has been posted!",
+            reply_markup=tg.types.InlineKeyboardMarkup([
+                [
+                    tg.types.InlineKeyboardButton(
+                        "Delete", callback_data=f"delete_{post.id}_{seed}"
+                    )
+                ]
+            ]),
+        )
+
+    except Exception as e:
+        logger.warning(e)
+    finally:
+        await rate_limiter.release(query.from_user.id)
+
+
+# Delete post handler
+@app.on_callback_query(tg.filters.regex(r"delete_\d+_\d+"))
+async def delete_post(client: tg.Client, query: tg.types.CallbackQuery):
+    if await rate_limiter.acquire(
+        query.from_user.id, "delete_post", config.COOLDOWN_API
+    ):
+        return
+
+    try:
+        uhash, _ = hash(query.from_user.id)
+
+        if await seedlist.get(uhash, None) is None:
+            if await blacklist.get(uhash, False):
+                return
+
+            await query.answer("Please use /start to first regenerate your seed.")
+            return
+
+        commands = query.data.split("_")
+        post_id = int(commands[1])
+        seed = int(commands[2])
+
+        post = await client.get_messages(config.CHANNEL_ID, post_id)
+        post_shash = (
+            post.caption.split("\n")[-1].split(" ")[-1][1:-1]
+            if post.text is None
+            else post.text.split("\n")[-1].split(" ")[-1][1:-1]
+        )
+
+        if post_shash != hash(query.from_user.id, seed=seed)[0]:
+            await query.answer("You are not authorized to delete this post.")
+            return
+
+        await post.delete()
+        logger.info(f"User ({uhash[:6]}...) has deleted a post.")
+        await query.answer("Post has been deleted.")
+        await query.message.edit_text("Post has been deleted.")
+
+    except Exception as e:
+        logger.warning(e)
+    finally:
+        await rate_limiter.release(query.from_user.id)
+
+
+# ---| Admin Commands |---
+
+
+# Blacklist command handler
+@app.on_message(
+    tg.filters.command("blacklist")
+    & tg.filters.private
+    & tg.filters.user(config.ADMINS)
+)
+async def blacklist_command(_, message: tg.types.Message):
+    if len(message.command) == 1:
+        await message.reply_text("Please provide a user ID.")
+        return
+
+    uhash = message.command[1]
+
+    await blacklist.set(uhash, True)
+    await seedlist.delete(uhash)
+    await nicknames.delete(uhash)
+
+    await message.reply_text("User has been blacklisted.")
+
+
+# Unblacklist command handler
+@app.on_message(
+    tg.filters.command("unblacklist")
+    & tg.filters.private
+    & tg.filters.user(config.ADMINS)
+)
+async def unblacklist_command(_, message: tg.types.Message):
+    if len(message.command) == 1:
+        await message.reply_text("Please provide a user ID.")
+        return
+
+    uhash = message.command[1]
+
+    await blacklist.delete(uhash)
+    await message.reply_text("User has been unblacklisted.")
+
+
+# Yank command handler
+@app.on_message(
+    tg.filters.command("yank") & tg.filters.private & tg.filters.user(config.ADMINS)
+)
+async def yank_command(_, message: tg.types.Message):
+    if len(message.command) == 1:
+        await message.reply_text("Please provide a message ID.")
+        return
+
+    post_id = int(message.command[1])
+
+    try:
+        await app.delete_messages(config.CHANNEL_ID, post_id)
+        await message.reply_text("Message has been deleted.")
+    except Exception as e:
+        logger.warning(e)
+        await message.reply_text("Failed to delete message.")
+
+
+if __name__ == "__main__":
+    app.run()

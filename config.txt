@@ -1,32 +1,23 @@
-# Change the filename to config.py
+## ------------- RENAME THIS FILE TO config.py ------------- ##
 
-# Session Name
-NAME = "TG-Chan"
+# Telegram API
 
-# Telegram API (https://my.telegram.org/)
-API_ID = 0
-API_HASH = "abcd"
-BOT_TOKEN = "wxyz"
-BOT_USERNAME = "XXXXX"
+SESSION_NAME = ""                                       # Session Name
+API_ID = 0                                              # API ID from my.telegram.org
+API_HASH = ""                                           # API Hash from my.telegram.org
+BOT_TOKEN = ""                                          # Bot Token from @BotFather
 
-# DB and Log
-SEED = 10
-OWNER_ID = 123
-DATABASE_FILE = "database.db"
-POST_ID = -456
-MEDIA_FOLDER = "media"
-POST_USERNAME = "XXXXX"
+# Database Configuration
 
-# Posting Policies
-POST_INTERVAL = 300
-DELETE_DISLIKE_LIMIT = 10
-UNPIN_DISLIKE_LIMIT = 5
-AUTODELETE_LIKE_LIMIT = 10
-PIN_LIKE_LIMIT = 20
-AUTODELETE_COUNT = 25
+BLACKLIST_FILE = "blacklist.db"                         # Blacklist Database File
+SEEDLIST_FILE = "seedlist.db"                           # Seedlist Database File
+NICKNAMES_FILE = "nicknames.db"                         # Nicknames Database File
+LOG_FILE = "main.log"                                    # Log File
 
-# Media Policies
-MAX_VIDEO_SIZE = 20000000 # 20 MB
-MAX_IMAGE_SIZE = 5000000 # 5 MB
-AUTOPURGE_MEDIA = True
-AUTOPURGE_INTERVAL = 15
+# Bot Configuration
+
+CHANNEL_ID = -000                                       # Channel ID
+ADMINS = (123456,234567,456789,567890,213434)           # Admins ID
+COOLDOWN_API = 30                                       # Rate-limit cooldown for API-based functions
+COOLDOWN_WRITE = 10                                     # Rate-limit cooldown for write operational functions
+COOLDOWN_READ = 5                                       # Rate-limit cooldown for read operational functions

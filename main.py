@@ -1,6 +1,5 @@
 # Import required libraries
 import re
-import time
 import pyrogram as tg
 from AShelve import AShelve
 import config
@@ -28,7 +27,6 @@ blacklist = AShelve(config.BLACKLIST_FILE)
 seedlist = AShelve(config.SEEDLIST_FILE)
 nicknames = AShelve(config.NICKNAMES_FILE)
 rate_limiter = RateLimiter()
-reply_to_cache: dict[int, int] = {}
 
 
 # Initialize the client
@@ -105,7 +103,7 @@ async def start_command(_, message: tg.types.Message):
             _, seed = hash(message.from_user.id, seed=-1)
             await seedlist.set(uhash, seed)
 
-            logger.info(f"A new user ({uhash}...) has been registered.")
+            logger.info(f"A new user ({uhash}) has been registered.")
 
         await message.reply_text(
             "Hi there! I am TG-Chan Handler Bot, and I can help you post messages on TG-Chan. **To post a message, just leave your message here :D**\n\nAdditional Commands:\n\n/info - Get your current hash, seed, and nickname\n/nick [x] - Change your nickname to [x] (ASCII symbols only)\n/privacy - Privacy Policy\n/delete [s] - Delete your stored data (To confirm, type your seed [s] after the command)\n\nIf you have any further questions, join @WazeChats",
@@ -181,7 +179,7 @@ async def nick_command(_, message: tg.types.Message):
         await nicknames.set(uhash, nickname)
         await message.reply_text(f"Your nickname has been set to `{nickname}`.")
 
-        logger.info(f"User ({uhash}...) has set their nickname to {nickname}.")
+        logger.info(f"User ({uhash}) has set their nickname to {nickname}.")
     except Exception as e:
         logger.error(e)
     finally:
@@ -236,12 +234,12 @@ async def delete_command(_, message: tg.types.Message):
         await seedlist.delete(uhash)
         await nicknames.delete(uhash)
 
-        logger.info(f"User ({uhash}...) has regenerated their seed.")
+        logger.info(f"User ({uhash}) has regenerated their seed.")
 
         await message.reply_text(
             "Your data has been deleted. To regenerate your seed, use /start."
         )
-        logger.info(f"User ({uhash}...) has deleted their data.")
+        logger.info(f"User ({uhash}) has deleted their data.")
     except Exception as e:
         logger.error(e)
     finally:
@@ -269,7 +267,7 @@ async def rehash(_, query: tg.types.CallbackQuery):
 
         _, seed = hash(query.from_user.id, seed=-1)
         await seedlist.set(uhash, seed)
-        logger.info(f"User ({uhash}...) has regenerated their seed.")
+        logger.info(f"User ({uhash}) has regenerated their seed.")
 
         await query.answer("Done!")
         await query.message.edit_text(
@@ -317,6 +315,13 @@ async def post(client: tg.Client, query: tg.types.CallbackQuery):
 
         msg = query.message.reply_to_message
 
+        if (
+            msg.reply_to_chat_id != config.CHANNEL_ID
+            and msg.reply_to_message_id is not None
+        ):
+            await query.answer("You can only reply to posts from the channel.")
+            return
+
         if msg.text is not None:
             if len(msg.text) > 4000:
                 await query.answer(
@@ -329,6 +334,7 @@ async def post(client: tg.Client, query: tg.types.CallbackQuery):
                 post = await client.send_message(
                     config.CHANNEL_ID,
                     msg.text.markdown + f"[​](tg://{shash})",
+                    reply_to_message_id=msg.reply_to_message_id,
                 )
             else:
                 nickname = await nicknames.get(uhash) or "User"
@@ -337,9 +343,10 @@ async def post(client: tg.Client, query: tg.types.CallbackQuery):
                     config.CHANNEL_ID,
                     msg.text.markdown
                     + f"\n\n~ {nickname} : {shash[:6]} [​](tg://{shash})",
+                    reply_to_message_id=msg.reply_to_message_id,
                 )
 
-        elif not (msg.photo is None and msg.video is None):
+        elif msg.caption is not None:
             if msg.caption is not None:
                 if len(msg.caption) > 4000:
                     await query.answer(
@@ -357,6 +364,7 @@ async def post(client: tg.Client, query: tg.types.CallbackQuery):
                     config.CHANNEL_ID,
                     caption=caption + f"[​](tg://{shash})",
                     has_spoiler=True,
+                    reply_to_message_id=msg.reply_to_message_id,
                 )
             else:
                 seed = await seedlist.get(uhash)
@@ -367,12 +375,13 @@ async def post(client: tg.Client, query: tg.types.CallbackQuery):
                     caption=caption
                     + f"\n\n~ {nickname} : {shash[:6]} [​](tg://{shash})",
                     has_spoiler=True,
+                    reply_to_message_id=msg.reply_to_message_id,
                 )
         else:
             await query.answer("Invalid message")
             return
 
-        logger.info(f"User ({uhash}...) has posted a message.")
+        logger.info(f"User ({uhash}) has posted a message.")
         await query.answer("Message has been posted!")
         await query.message.edit_text(
             "Message has been posted!",
@@ -425,7 +434,7 @@ async def delete_post(client: tg.Client, query: tg.types.CallbackQuery):
             return
 
         await post.delete()
-        logger.info(f"User ({uhash}...) has deleted a post.")
+        logger.info(f"User ({uhash}) has deleted a post.")
         await query.answer("Post has been deleted.")
         await query.message.edit_text("Post has been deleted.")
 

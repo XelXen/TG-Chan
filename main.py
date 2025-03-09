@@ -346,7 +346,13 @@ async def post(client: tg.Client, query: tg.types.CallbackQuery):
                     reply_to_message_id=msg.reply_to_message_id,
                 )
 
-        elif msg.caption is not None:
+        elif not (
+            msg.video is None
+            and msg.photo is None
+            and msg.document is None
+            and msg.audio is None
+            and msg.voice is None
+        ):
             if msg.caption is not None:
                 if len(msg.caption) > 4000:
                     await query.answer(

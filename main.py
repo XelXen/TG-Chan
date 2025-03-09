@@ -82,7 +82,7 @@ async def text_handler(_, message: tg.types.Message):
             reply_to_message_id=message.id,
         )
     except Exception as e:
-        logger.warning(e)
+        logger.error(e)
     finally:
         await rate_limiter.release(message.from_user.id)
 
@@ -104,15 +104,14 @@ async def start_command(_, message: tg.types.Message):
 
             _, seed = hash(message.from_user.id, seed=-1)
             await seedlist.set(uhash, seed)
-            await nicknames.set(uhash, "User")
 
-            logger.info(f"A new user ({uhash[:6]}...) has been registered.")
+            logger.info(f"A new user ({uhash}...) has been registered.")
 
         await message.reply_text(
             "Hi there! I am TG-Chan Handler Bot, and I can help you post messages on TG-Chan. **To post a message, just leave your message here :D**\n\nAdditional Commands:\n\n/info - Get your current hash, seed, and nickname\n/nick [x] - Change your nickname to [x] (ASCII symbols only)\n/privacy - Privacy Policy\n/delete [s] - Delete your stored data (To confirm, type your seed [s] after the command)\n\nIf you have any further questions, join @WazeChats",
         )
     except Exception as e:
-        logger.warning(e)
+        logger.error(e)
     finally:
         await rate_limiter.release(message.from_user.id)
 
@@ -147,7 +146,7 @@ async def info_command(_, message: tg.types.Message):
             ]),
         )
     except Exception as e:
-        logger.warning(e)
+        logger.error(e)
     finally:
         await rate_limiter.release(message.from_user.id)
 
@@ -182,9 +181,9 @@ async def nick_command(_, message: tg.types.Message):
         await nicknames.set(uhash, nickname)
         await message.reply_text(f"Your nickname has been set to `{nickname}`.")
 
-        logger.info(f"User ({uhash[:6]}...) has set their nickname to {nickname}.")
+        logger.info(f"User ({uhash}...) has set their nickname to {nickname}.")
     except Exception as e:
-        logger.warning(e)
+        logger.error(e)
     finally:
         await rate_limiter.release(message.from_user.id)
 
@@ -202,7 +201,7 @@ async def privacy_command(_, message: tg.types.Message):
             "The bot does not store any personal data except for the user's hash, seed, and nickname. Everything else is computed on the go and is not stored for any longer than necessary."
         )
     except Exception as e:
-        logger.warning(e)
+        logger.error(e)
     finally:
         await rate_limiter.release(message.from_user.id)
 
@@ -237,14 +236,14 @@ async def delete_command(_, message: tg.types.Message):
         await seedlist.delete(uhash)
         await nicknames.delete(uhash)
 
-        logger.info(f"User ({uhash[:6]}...) has regenerated their seed.")
+        logger.info(f"User ({uhash}...) has regenerated their seed.")
 
         await message.reply_text(
             "Your data has been deleted. To regenerate your seed, use /start."
         )
-        logger.info(f"User ({uhash[:6]}...) has deleted their data.")
+        logger.info(f"User ({uhash}...) has deleted their data.")
     except Exception as e:
-        logger.warning(e)
+        logger.error(e)
     finally:
         await rate_limiter.release(message.from_user.id)
 
@@ -270,14 +269,14 @@ async def rehash(_, query: tg.types.CallbackQuery):
 
         _, seed = hash(query.from_user.id, seed=-1)
         await seedlist.set(uhash, seed)
-        logger.info(f"User ({uhash[:6]}...) has regenerated their seed.")
+        logger.info(f"User ({uhash}...) has regenerated their seed.")
 
         await query.answer("Done!")
         await query.message.edit_text(
             "Your seed has been regenerated. Use /info to view the changes."
         )
     except Exception as e:
-        logger.warning(e)
+        logger.error(e)
     finally:
         await rate_limiter.release(query.from_user.id)
 
@@ -296,7 +295,7 @@ async def cancel(_, query: tg.types.CallbackQuery):
 
         await query.message.edit_text("Request has been cancelled.")
     except Exception as e:
-        logger.warning(e)
+        logger.error(e)
     finally:
         await rate_limiter.release(query.from_user.id)
 
@@ -329,14 +328,15 @@ async def post(client: tg.Client, query: tg.types.CallbackQuery):
                 shash, seed = hash(query.from_user.id, seed=-1)
                 post = await client.send_message(
                     config.CHANNEL_ID,
-                    msg.text.markdown + f"\n\n~ ({shash})",
+                    msg.text.markdown + f"[​](tg://{shash})",
                 )
             else:
-                nickname = await nicknames.get(uhash)
+                nickname = await nicknames.get(uhash) or "User"
                 shash, _ = hash(query.from_user.id, seed=seed)
                 post = await client.send_message(
                     config.CHANNEL_ID,
-                    msg.text.markdown + f"\n\n~ {nickname} ({shash})",
+                    msg.text.markdown
+                    + f"\n\n~ {nickname} : {shash[:6]} [​](tg://{shash})",
                 )
 
         elif not (msg.photo is None and msg.video is None):
@@ -355,7 +355,7 @@ async def post(client: tg.Client, query: tg.types.CallbackQuery):
                 shash, seed = hash(query.from_user.id, seed=-1)
                 post = await msg.copy(
                     config.CHANNEL_ID,
-                    caption=caption + f"\n\n~ ({shash})",
+                    caption=caption + f"[​](tg://{shash})",
                     has_spoiler=True,
                 )
             else:
@@ -364,14 +364,15 @@ async def post(client: tg.Client, query: tg.types.CallbackQuery):
                 shash, _ = hash(query.from_user.id, seed=seed)
                 post = await msg.copy(
                     config.CHANNEL_ID,
-                    caption=caption + f"\n\n~ {nickname} ({shash})",
+                    caption=caption
+                    + f"\n\n~ {nickname} : {shash[:6]} [​](tg://{shash})",
                     has_spoiler=True,
                 )
         else:
             await query.answer("Invalid message")
             return
 
-        logger.info(f"User ({uhash[:6]}...) has posted a message.")
+        logger.info(f"User ({uhash}...) has posted a message.")
         await query.answer("Message has been posted!")
         await query.message.edit_text(
             "Message has been posted!",
@@ -385,7 +386,7 @@ async def post(client: tg.Client, query: tg.types.CallbackQuery):
         )
 
     except Exception as e:
-        logger.warning(e)
+        logger.error(e)
     finally:
         await rate_limiter.release(query.from_user.id)
 
@@ -414,9 +415,9 @@ async def delete_post(client: tg.Client, query: tg.types.CallbackQuery):
 
         post = await client.get_messages(config.CHANNEL_ID, post_id)
         post_shash = (
-            post.caption.split("\n")[-1].split(" ")[-1][1:-1]
+            post.caption.markdown[-57:-1]
             if post.text is None
-            else post.text.split("\n")[-1].split(" ")[-1][1:-1]
+            else post.text.markdown[-57:-1]
         )
 
         if post_shash != hash(query.from_user.id, seed=seed)[0]:
@@ -424,12 +425,12 @@ async def delete_post(client: tg.Client, query: tg.types.CallbackQuery):
             return
 
         await post.delete()
-        logger.info(f"User ({uhash[:6]}...) has deleted a post.")
+        logger.info(f"User ({uhash}...) has deleted a post.")
         await query.answer("Post has been deleted.")
         await query.message.edit_text("Post has been deleted.")
 
     except Exception as e:
-        logger.warning(e)
+        logger.error(e)
     finally:
         await rate_limiter.release(query.from_user.id)
 
@@ -489,7 +490,7 @@ async def yank_command(_, message: tg.types.Message):
         await app.delete_messages(config.CHANNEL_ID, post_id)
         await message.reply_text("Message has been deleted.")
     except Exception as e:
-        logger.warning(e)
+        logger.error(e)
         await message.reply_text("Failed to delete message.")
 
 

@@ -388,9 +388,9 @@ async def post(client: tg.Client, query: tg.types.CallbackQuery):
             return
 
         logger.info(f"User ({uhash}) has posted a message.")
-        await query.answer("Message has been posted!")
+        await query.answer("Done!")
         await query.message.edit_text(
-            "Message has been posted!",
+            f"[Message](https://t.me/{config.CHANNEL_USERNAME}/{post.id}) has been posted!",
             reply_markup=tg.types.InlineKeyboardMarkup([
                 [
                     tg.types.InlineKeyboardButton(

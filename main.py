@@ -333,7 +333,7 @@ async def post(client: tg.Client, query: tg.types.CallbackQuery):
                 shash, seed = hash(query.from_user.id, seed=-1)
                 post = await client.send_message(
                     config.CHANNEL_ID,
-                    msg.text.markdown + f"[​](tg://{shash})",
+                    msg.text.markdown + f"\n\n~ Anonymous [​](tg://{shash})",
                     reply_to_message_id=msg.reply_to_message_id,
                 )
             else:
@@ -368,7 +368,7 @@ async def post(client: tg.Client, query: tg.types.CallbackQuery):
                 shash, seed = hash(query.from_user.id, seed=-1)
                 post = await msg.copy(
                     config.CHANNEL_ID,
-                    caption=caption + f"[​](tg://{shash})",
+                    caption=caption + f"\n\n~ Anonymous [​](tg://{shash})",
                     has_spoiler=True,
                     reply_to_message_id=msg.reply_to_message_id,
                 )

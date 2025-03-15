@@ -49,7 +49,16 @@ def hash(value: int, seed: int = 0) -> tuple[str, int]:
 
 @app.on_message(
     tg.filters.private
-    & ~tg.filters.command(["start", "info", "nick", "privacy", "delete", "blacklist", "unblacklist", "yank"])
+    & ~tg.filters.command([
+        "start",
+        "info",
+        "nick",
+        "privacy",
+        "delete",
+        "blacklist",
+        "unblacklist",
+        "yank",
+    ])
 )
 async def text_handler(_, message: tg.types.Message):
     if await rate_limiter.acquire(message.from_user.id, "text", config.COOLDOWN_READ):
@@ -394,8 +403,42 @@ async def post(client: tg.Client, query: tg.types.CallbackQuery):
             reply_markup=tg.types.InlineKeyboardMarkup([
                 [
                     tg.types.InlineKeyboardButton(
-                        "Delete", callback_data=f"delete_{post.id}_{seed}"
+                        "Delete", callback_data=f"vdelete_{post.id}_{seed}"
                     )
+                ]
+            ]),
+        )
+
+    except Exception as e:
+        logger.error(e)
+    finally:
+        await rate_limiter.release(query.from_user.id)
+
+
+# Delete Verification handler
+@app.on_callback_query(tg.filters.regex(r"vdelete_\d+_\d+"))
+async def ver_delete(_, query: tg.types.CallbackQuery):
+    if await rate_limiter.acquire(
+        query.from_user.id, "vdelete", config.COOLDOWN_API
+    ):
+        return
+
+    try:
+        uhash, _ = hash(query.from_user.id)
+
+        if await seedlist.get(uhash, None) is None:
+            if await blacklist.get(uhash, False):
+                return
+
+            await query.answer("Please use /start to first regenerate your seed.")
+            return
+
+        await query.edit_message_text(
+            "Are you sure you want to delete this post? This action cannot be undone.",
+            reply_markup=tg.types.InlineKeyboardMarkup([
+                [
+                    tg.types.InlineKeyboardButton("Yes", callback_data=query.data[1:]),
+                    tg.types.InlineKeyboardButton("No", callback_data="cancel"),
                 ]
             ]),
         )

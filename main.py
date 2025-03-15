@@ -357,6 +357,7 @@ async def post(client: tg.Client, query: tg.types.CallbackQuery):
 
         elif not (
             msg.video is None
+            and msg.animation is None
             and msg.photo is None
             and msg.document is None
             and msg.audio is None
@@ -418,9 +419,7 @@ async def post(client: tg.Client, query: tg.types.CallbackQuery):
 # Delete Verification handler
 @app.on_callback_query(tg.filters.regex(r"vdelete_\d+_\d+"))
 async def ver_delete(_, query: tg.types.CallbackQuery):
-    if await rate_limiter.acquire(
-        query.from_user.id, "vdelete", config.COOLDOWN_API
-    ):
+    if await rate_limiter.acquire(query.from_user.id, "vdelete", config.COOLDOWN_API):
         return
 
     try:
@@ -438,11 +437,34 @@ async def ver_delete(_, query: tg.types.CallbackQuery):
             reply_markup=tg.types.InlineKeyboardMarkup([
                 [
                     tg.types.InlineKeyboardButton("Yes", callback_data=query.data[1:]),
-                    tg.types.InlineKeyboardButton("No", callback_data="cancel"),
+                    tg.types.InlineKeyboardButton("No", callback_data=f"c{query.data[1:]}"),
                 ]
             ]),
         )
 
+    except Exception as e:
+        logger.error(e)
+    finally:
+        await rate_limiter.release(query.from_user.id)
+
+
+# Delete Cancel handler
+@app.on_callback_query(tg.filters.regex(r"cdelete_\d+_\d+"))
+async def del_cancel(_, query: tg.types.CallbackQuery):
+    if await rate_limiter.acquire(query.from_user.id, "cdelete", config.COOLDOWN_API):
+        return
+
+    try:
+        await query.edit_message_text(
+            "Request has been cancelled.",
+            reply_markup=tg.types.InlineKeyboardMarkup([
+                [
+                    tg.types.InlineKeyboardButton(
+                        "Re-Delete", callback_data=f"v{query.data[1:]}"
+                    )
+                ]
+            ]),
+        )
     except Exception as e:
         logger.error(e)
     finally:

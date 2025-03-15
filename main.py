@@ -49,7 +49,7 @@ def hash(value: int, seed: int = 0) -> tuple[str, int]:
 
 @app.on_message(
     tg.filters.private
-    & ~tg.filters.command(["start", "info", "nick", "privacy", "delete"])
+    & ~tg.filters.command(["start", "info", "nick", "privacy", "delete", "blacklist", "unblacklist", "yank"])
 )
 async def text_handler(_, message: tg.types.Message):
     if await rate_limiter.acquire(message.from_user.id, "text", config.COOLDOWN_READ):

@@ -13,6 +13,7 @@ from os import path, mkdir
 # Configure basic logging with a FileHandler
 date = None
 
+
 def setup_logger():
     global date
     global logger
@@ -76,7 +77,7 @@ def hash(value: int, seed: int = 0) -> tuple[str, int]:
         "blacklist",
         "unblacklist",
         "yank",
-        "logs"
+        "logs",
     ])
 )
 async def text_handler(_, message: tg.types.Message):
@@ -205,7 +206,9 @@ async def nick_command(_, message: tg.types.Message):
             )
             return
         elif not re.match(r"^[A-Za-z0-9 _-]+$", nickname):
-            await message.reply_text("Nickname can only contain ASCII characters.")
+            await message.reply_text(
+                "Nickname can only contain A-Z, a-z, 0-9, _, -, [space]"
+            )
             return
 
         await nicknames.set(uhash, nickname)
@@ -370,11 +373,14 @@ async def post(client: tg.Client, query: tg.types.CallbackQuery):
                 )
                 return
 
+            if msg.forward_from_chat is not None:
+                fwd = f"(Fwd: {msg.forward_from_chat.title or msg.forward_from_chat.username or msg.forward_from_chat.first_name})"
+
             if query.data == "post_anon":
                 shash, seed = hash(query.from_user.id, seed=-1)
                 post = await client.send_message(
                     config.CHANNEL_ID,
-                    msg.text.markdown + f"\n\n~ Anonymous [​](tg://{shash})",
+                    msg.text.markdown + f"\n\n~ Anonymous {fwd} [​](tg://{shash})",
                     reply_to_message_id=msg.reply_to_message_id,
                 )
             else:
@@ -383,7 +389,7 @@ async def post(client: tg.Client, query: tg.types.CallbackQuery):
                 post = await client.send_message(
                     config.CHANNEL_ID,
                     msg.text.markdown
-                    + f"\n\n~ {nickname} : {shash[:6]} [​](tg://{shash})",
+                    + f"\n\n~ {nickname} {fwd} : {shash[:6]} [​](tg://{shash})",
                     reply_to_message_id=msg.reply_to_message_id,
                 )
 
@@ -410,7 +416,7 @@ async def post(client: tg.Client, query: tg.types.CallbackQuery):
                 shash, seed = hash(query.from_user.id, seed=-1)
                 post = await msg.copy(
                     config.CHANNEL_ID,
-                    caption=caption + f"\n\n~ Anonymous [​](tg://{shash})",
+                    caption=caption + f"\n\n~ Anonymous {fwd} [​](tg://{shash})",
                     has_spoiler=True,
                     reply_to_message_id=msg.reply_to_message_id,
                 )
@@ -421,7 +427,7 @@ async def post(client: tg.Client, query: tg.types.CallbackQuery):
                 post = await msg.copy(
                     config.CHANNEL_ID,
                     caption=caption
-                    + f"\n\n~ {nickname} : {shash[:6]} [​](tg://{shash})",
+                    + f"\n\n~ {nickname} {fwd} : {shash[:6]} [​](tg://{shash})",
                     has_spoiler=True,
                     reply_to_message_id=msg.reply_to_message_id,
                 )

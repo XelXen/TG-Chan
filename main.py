@@ -8,7 +8,7 @@ import random
 from rate_limiter import RateLimiter
 import logging
 import datetime as dt
-from os import path, mkdir
+from os import path, mkdir, remove, rename
 
 # Configure basic logging with a FileHandler
 date = None
@@ -20,19 +20,25 @@ def setup_logger():
 
     curdate = dt.datetime.now().strftime("%Y-%m-%d")
     if date != curdate:
-        print("Log file has been renewed.")
-
-        date = curdate
+        print("Updating log file...")
 
         if not path.exists("logs"):
             mkdir("logs")
+        elif date is not None:
+            if path.exists("logs/old.log"):
+                remove("logs/old.log")
+
+            if path.exists(f"logs/{date}.log"):
+                rename(f"logs/{date}.log", "logs/old.log")
+
+        date = curdate
 
         logging.basicConfig(
             level=logging.INFO,
             format="[%(asctime)s] %(message)s",
             datefmt="%H:%M:%S",
             handlers=[
-                logging.FileHandler(f"logs/{curdate}.log"),
+                logging.FileHandler(f"logs/{date}.log"),
                 logging.StreamHandler(),
             ],
         )
@@ -374,13 +380,17 @@ async def post(client: tg.Client, query: tg.types.CallbackQuery):
                 return
 
             if msg.forward_from_chat is not None:
-                fwd = f"(Fwd: {msg.forward_from_chat.title or msg.forward_from_chat.username or msg.forward_from_chat.first_name})"
+                fwd = f" (FWD: {msg.forward_from_chat.username or msg.forward_from_chat.title})"
+            elif msg.forward_from is not None:
+                fwd = f" (FWD: {msg.forward_from.username or msg.forward_from.full_name})"
+            else:
+                fwd = ""
 
             if query.data == "post_anon":
                 shash, seed = hash(query.from_user.id, seed=-1)
                 post = await client.send_message(
                     config.CHANNEL_ID,
-                    msg.text.markdown + f"\n\n~ Anonymous {fwd} [​](tg://{shash})",
+                    msg.text.markdown + f"\n\n~ Anonymous{fwd} [​](tg://{shash})",
                     reply_to_message_id=msg.reply_to_message_id,
                 )
             else:
@@ -389,7 +399,7 @@ async def post(client: tg.Client, query: tg.types.CallbackQuery):
                 post = await client.send_message(
                     config.CHANNEL_ID,
                     msg.text.markdown
-                    + f"\n\n~ {nickname} {fwd} : {shash[:6]} [​](tg://{shash})",
+                    + f"\n\n~ {nickname}{fwd} : {shash[:6]} [​](tg://{shash})",
                     reply_to_message_id=msg.reply_to_message_id,
                 )
 
@@ -416,7 +426,7 @@ async def post(client: tg.Client, query: tg.types.CallbackQuery):
                 shash, seed = hash(query.from_user.id, seed=-1)
                 post = await msg.copy(
                     config.CHANNEL_ID,
-                    caption=caption + f"\n\n~ Anonymous {fwd} [​](tg://{shash})",
+                    caption=caption + f"\n\n~ Anonymous{fwd} [​](tg://{shash})",
                     has_spoiler=True,
                     reply_to_message_id=msg.reply_to_message_id,
                 )
@@ -427,7 +437,7 @@ async def post(client: tg.Client, query: tg.types.CallbackQuery):
                 post = await msg.copy(
                     config.CHANNEL_ID,
                     caption=caption
-                    + f"\n\n~ {nickname} {fwd} : {shash[:6]} [​](tg://{shash})",
+                    + f"\n\n~ {nickname}{fwd} : {shash[:6]} [​](tg://{shash})",
                     has_spoiler=True,
                     reply_to_message_id=msg.reply_to_message_id,
                 )

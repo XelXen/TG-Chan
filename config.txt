@@ -18,7 +18,7 @@ LOG_FILE = "main.log"                                    # Log File
 
 CHANNEL_ID = -000                                       # Channel ID
 CHANNEL_USERNAME = ""                                   # Channel Username (without @) (or channel ID if it's private)
-ADMINS = (123456,234567,456789,567890,213434)           # Admins ID
+ADMINS = [123456,234567,456789,567890,213434]           # Admins ID
 COOLDOWN_API = 30                                       # Rate-limit cooldown for API-based functions
 COOLDOWN_WRITE = 10                                     # Rate-limit cooldown for write operational functions
 COOLDOWN_READ = 5                                       # Rate-limit cooldown for read operational functions

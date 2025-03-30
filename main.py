@@ -380,9 +380,9 @@ async def post(client: tg.Client, query: tg.types.CallbackQuery):
                 return
 
             if msg.forward_from_chat is not None:
-                fwd = f" (FWD: {msg.forward_from_chat.username or msg.forward_from_chat.title})"
+                fwd = f" (FWD: {('@'+msg.forward_from_chat.username) or msg.forward_from_chat.title})"
             elif msg.forward_from is not None:
-                fwd = f" (FWD: {msg.forward_from.username or msg.forward_from.full_name})"
+                fwd = f" (FWD: {('@'+msg.forward_from.username) or msg.forward_from.full_name})"
             else:
                 fwd = ""
 

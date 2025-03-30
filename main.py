@@ -7,19 +7,36 @@ import hashlib
 import random
 from rate_limiter import RateLimiter
 import logging
+import datetime as dt
+from os import path, mkdir
 
-# Configure basic logging with a FileHandler (which is thread‑safe)
-logging.basicConfig(
-    level=logging.INFO,
-    format="[%(asctime)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-    handlers=[
-        logging.FileHandler(config.LOG_FILE),
-        logging.StreamHandler(),
-    ],
-)
+# Configure basic logging with a FileHandler
+date = None
 
-logger = logging.getLogger(__name__)
+def setup_logger():
+    global date
+    global logger
+
+    curdate = dt.datetime.now().strftime("%Y-%m-%d")
+    if date != curdate:
+        print("Log file has been renewed.")
+
+        date = curdate
+
+        if not path.exists("logs"):
+            mkdir("logs")
+
+        logging.basicConfig(
+            level=logging.INFO,
+            format="[%(asctime)s] %(message)s",
+            datefmt="%H:%M:%S",
+            handlers=[
+                logging.FileHandler(f"logs/{curdate}.log"),
+                logging.StreamHandler(),
+            ],
+        )
+
+        logger = logging.getLogger(__name__)
 
 
 # Initialize the backend
@@ -27,6 +44,7 @@ blacklist = AShelve(config.BLACKLIST_FILE)
 seedlist = AShelve(config.SEEDLIST_FILE)
 nicknames = AShelve(config.NICKNAMES_FILE)
 rate_limiter = RateLimiter()
+setup_logger()
 
 
 # Initialize the client
@@ -58,6 +76,7 @@ def hash(value: int, seed: int = 0) -> tuple[str, int]:
         "blacklist",
         "unblacklist",
         "yank",
+        "logs"
     ])
 )
 async def text_handler(_, message: tg.types.Message):
@@ -89,6 +108,7 @@ async def text_handler(_, message: tg.types.Message):
             reply_to_message_id=message.id,
         )
     except Exception as e:
+        setup_logger()
         logger.error(e)
     finally:
         await rate_limiter.release(message.from_user.id)
@@ -112,12 +132,14 @@ async def start_command(_, message: tg.types.Message):
             _, seed = hash(message.from_user.id, seed=-1)
             await seedlist.set(uhash, seed)
 
+            setup_logger()
             logger.info(f"A new user ({uhash}) has been registered.")
 
         await message.reply_text(
             "Hi there! I am TG-Chan Handler Bot, and I can help you post messages on TG-Chan. **To post a message, just leave your message here :D**\n\nAdditional Commands:\n\n/info - Get your current hash, seed, and nickname\n/nick [x] - Change your nickname to [x] (ASCII symbols only)\n/privacy - Privacy Policy\n/delete [s] - Delete your stored data (To confirm, type your seed [s] after the command)\n\nIf you have any further questions, join @WazeChats",
         )
     except Exception as e:
+        setup_logger()
         logger.error(e)
     finally:
         await rate_limiter.release(message.from_user.id)
@@ -153,6 +175,7 @@ async def info_command(_, message: tg.types.Message):
             ]),
         )
     except Exception as e:
+        setup_logger()
         logger.error(e)
     finally:
         await rate_limiter.release(message.from_user.id)
@@ -188,8 +211,10 @@ async def nick_command(_, message: tg.types.Message):
         await nicknames.set(uhash, nickname)
         await message.reply_text(f"Your nickname has been set to `{nickname}`.")
 
+        setup_logger()
         logger.info(f"User ({uhash}) has set their nickname to {nickname}.")
     except Exception as e:
+        setup_logger()
         logger.error(e)
     finally:
         await rate_limiter.release(message.from_user.id)
@@ -208,6 +233,7 @@ async def privacy_command(_, message: tg.types.Message):
             "The bot does not store any personal data except for the user's hash, seed, and nickname. Everything else is computed on the go and is not stored for any longer than necessary."
         )
     except Exception as e:
+        setup_logger()
         logger.error(e)
     finally:
         await rate_limiter.release(message.from_user.id)
@@ -243,13 +269,16 @@ async def delete_command(_, message: tg.types.Message):
         await seedlist.delete(uhash)
         await nicknames.delete(uhash)
 
+        setup_logger()
         logger.info(f"User ({uhash}) has regenerated their seed.")
 
         await message.reply_text(
             "Your data has been deleted. To regenerate your seed, use /start."
         )
+        setup_logger()
         logger.info(f"User ({uhash}) has deleted their data.")
     except Exception as e:
+        setup_logger()
         logger.error(e)
     finally:
         await rate_limiter.release(message.from_user.id)
@@ -276,6 +305,7 @@ async def rehash(_, query: tg.types.CallbackQuery):
 
         _, seed = hash(query.from_user.id, seed=-1)
         await seedlist.set(uhash, seed)
+        setup_logger()
         logger.info(f"User ({uhash}) has regenerated their seed.")
 
         await query.answer("Done!")
@@ -283,6 +313,7 @@ async def rehash(_, query: tg.types.CallbackQuery):
             "Your seed has been regenerated. Use /info to view the changes."
         )
     except Exception as e:
+        setup_logger()
         logger.error(e)
     finally:
         await rate_limiter.release(query.from_user.id)
@@ -302,6 +333,7 @@ async def cancel(_, query: tg.types.CallbackQuery):
 
         await query.message.edit_text("Request has been cancelled.")
     except Exception as e:
+        setup_logger()
         logger.error(e)
     finally:
         await rate_limiter.release(query.from_user.id)
@@ -397,6 +429,7 @@ async def post(client: tg.Client, query: tg.types.CallbackQuery):
             await query.answer("Invalid message")
             return
 
+        setup_logger()
         logger.info(f"User ({uhash}) has posted a message.")
         await query.answer("Done!")
         await query.message.edit_text(
@@ -411,6 +444,7 @@ async def post(client: tg.Client, query: tg.types.CallbackQuery):
         )
 
     except Exception as e:
+        setup_logger()
         logger.error(e)
     finally:
         await rate_limiter.release(query.from_user.id)
@@ -437,12 +471,15 @@ async def ver_delete(_, query: tg.types.CallbackQuery):
             reply_markup=tg.types.InlineKeyboardMarkup([
                 [
                     tg.types.InlineKeyboardButton("Yes", callback_data=query.data[1:]),
-                    tg.types.InlineKeyboardButton("No", callback_data=f"c{query.data[1:]}"),
+                    tg.types.InlineKeyboardButton(
+                        "No", callback_data=f"c{query.data[1:]}"
+                    ),
                 ]
             ]),
         )
 
     except Exception as e:
+        setup_logger()
         logger.error(e)
     finally:
         await rate_limiter.release(query.from_user.id)
@@ -466,6 +503,7 @@ async def del_cancel(_, query: tg.types.CallbackQuery):
             ]),
         )
     except Exception as e:
+        setup_logger()
         logger.error(e)
     finally:
         await rate_limiter.release(query.from_user.id)
@@ -505,11 +543,13 @@ async def delete_post(client: tg.Client, query: tg.types.CallbackQuery):
             return
 
         await post.delete()
+        setup_logger()
         logger.info(f"User ({uhash}) has deleted a post.")
         await query.answer("Post has been deleted.")
         await query.message.edit_text("Post has been deleted.")
 
     except Exception as e:
+        setup_logger()
         logger.error(e)
     finally:
         await rate_limiter.release(query.from_user.id)
@@ -570,8 +610,23 @@ async def yank_command(_, message: tg.types.Message):
         await app.delete_messages(config.CHANNEL_ID, post_id)
         await message.reply_text("Message has been deleted.")
     except Exception as e:
+        setup_logger()
         logger.error(e)
         await message.reply_text("Failed to delete message.")
+
+
+@app.on_message(
+    tg.filters.command("logs") & tg.filters.private & tg.filters.user(config.ADMINS)
+)
+async def logs_command(_, message: tg.types.Message):
+    # Upload the log file to the user
+    try:
+        with open(f"logs/{date}.log", "rb") as log_file:
+            await message.reply_document(log_file)
+    except Exception as e:
+        setup_logger()
+        logger.error(e)
+        await message.reply_text("Failed to upload logs.")
 
 
 if __name__ == "__main__":

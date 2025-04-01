@@ -18,32 +18,31 @@ def setup_logger():
     global date
     global logger
 
-    curdate = dt.datetime.now().strftime("%Y-%m-%d")
+    curt = dt.datetime.now()
+    curdate = curt.strftime("%Y-%m-%d")
     if date != curdate:
         print("Updating log file...")
 
         if not path.exists("logs"):
             mkdir("logs")
-        elif date is not None:
-            if path.exists("logs/old.log"):
-                remove("logs/old.log")
-
-            if path.exists(f"logs/{date}.log"):
-                rename(f"logs/{date}.log", "logs/old.log")
-
-        date = curdate
+        else:
+            dby = (curt - dt.timedelta(days=2)).strftime("%Y-%m-%d")
+            if path.exists(f"logs/{dby}.log"):
+                remove(f"logs/{dby}.log")
 
         logging.basicConfig(
             level=logging.INFO,
             format="[%(asctime)s] %(message)s",
             datefmt="%H:%M:%S",
             handlers=[
-                logging.FileHandler(f"logs/{date}.log"),
+                logging.FileHandler(f"logs/{curdate}.log"),
                 logging.StreamHandler(),
             ],
         )
 
         logger = logging.getLogger(__name__)
+
+        date = curdate
 
 
 # Initialize the backend
@@ -371,6 +370,13 @@ async def post(client: tg.Client, query: tg.types.CallbackQuery):
         ):
             await query.answer("You can only reply to posts from the channel.")
             return
+        
+        if msg.forward_from_chat is not None:
+            fwd = f" (FWD: {('@'+msg.forward_from_chat.username) or msg.forward_from_chat.title})"
+        elif msg.forward_from is not None:
+            fwd = f" (FWD: {('@'+msg.forward_from.username) or msg.forward_from.full_name})"
+        else:
+            fwd = ""
 
         if msg.text is not None:
             if len(msg.text) > 4000:
@@ -378,13 +384,6 @@ async def post(client: tg.Client, query: tg.types.CallbackQuery):
                     "Message is too long. Please keep it under 4000 characters."
                 )
                 return
-
-            if msg.forward_from_chat is not None:
-                fwd = f" (FWD: {('@'+msg.forward_from_chat.username) or msg.forward_from_chat.title})"
-            elif msg.forward_from is not None:
-                fwd = f" (FWD: {('@'+msg.forward_from.username) or msg.forward_from.full_name})"
-            else:
-                fwd = ""
 
             if query.data == "post_anon":
                 shash, seed = hash(query.from_user.id, seed=-1)

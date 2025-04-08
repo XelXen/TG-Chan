@@ -8,11 +8,11 @@ import random
 from rate_limiter import RateLimiter
 import logging
 import datetime as dt
-from os import path, mkdir, remove, rename
+from os import path, mkdir, remove
 
 # Configure basic logging with a FileHandler
 date = None
-
+logger = None
 
 def setup_logger():
     global date
@@ -20,15 +20,19 @@ def setup_logger():
 
     curt = dt.datetime.now()
     curdate = curt.strftime("%Y-%m-%d")
+
     if date != curdate:
         print("Updating log file...")
 
         if not path.exists("logs"):
             mkdir("logs")
-        else:
-            dby = (curt - dt.timedelta(days=2)).strftime("%Y-%m-%d")
-            if path.exists(f"logs/{dby}.log"):
-                remove(f"logs/{dby}.log")
+
+        if logger is not None:
+            logging.shutdown()
+                
+        dby = (curt - dt.timedelta(days=2)).strftime("%Y-%m-%d")
+        if path.exists(f"logs/{dby}.log"):
+            remove(f"logs/{dby}.log")
 
         logging.basicConfig(
             level=logging.INFO,
